@@ -1,0 +1,14 @@
+# Real credentials live in Vercel environment variables, never in an upload.
+.env
+.env.*
+!.env.example
+
+node_modules
+**/node_modules
+**/.next
+**/dist
+.agents
+.claude
+.mcp.json
+skills-lock.json
+tools/shots
