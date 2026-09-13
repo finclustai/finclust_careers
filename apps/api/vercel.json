@@ -1,8 +1,9 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
+  "regions": ["bom1"],
   "installCommand": "pnpm install --frozen-lockfile",
-  "buildCommand": "cd ../.. && pnpm --filter @finclust/db exec prisma generate && pnpm --filter @finclust/domain --filter @finclust/db build && pnpm --filter @finclust/api build && mkdir -p apps/api/public",
+  "buildCommand": "cd ../.. && pnpm --filter @finclust/db exec prisma generate && pnpm --filter @finclust/domain --filter @finclust/db build && pnpm --filter @finclust/api build",
   "outputDirectory": "public",
   "functions": {
     "api/index.js": { "maxDuration": 30 }
