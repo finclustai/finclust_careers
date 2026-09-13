@@ -11,6 +11,17 @@ import { clientIp } from "./client-ip.js";
 export class ClientIpThrottlerGuard extends ThrottlerGuard {
   protected override async getTracker(req: Record<string, unknown>): Promise<string> {
     const request = req as unknown as Request;
-    return clientIp(request.headers, request.socket?.remoteAddress ?? "unknown");
+    const key = clientIp(request.headers, request.socket?.remoteAddress ?? "unknown");
+    // TEMPORARY DIAGNOSTIC: remove once proxy IP forwarding is confirmed.
+    if (request.url?.includes("/auth/login")) {
+      console.log("[ip-diag]", JSON.stringify({
+        key,
+        vff: request.headers["x-vercel-forwarded-for"],
+        xff: request.headers["x-forwarded-for"],
+        xri: request.headers["x-real-ip"],
+        via: request.headers["x-vercel-id"],
+      }));
+    }
+    return key;
   }
 }
