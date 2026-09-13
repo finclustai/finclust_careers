@@ -1,0 +1,22 @@
+{
+  "name": "finclust",
+  "private": true,
+  "packageManager": "pnpm@10.15.1",
+  "scripts": {
+    "setup": "pnpm install && pnpm db:generate && pnpm build:packages && pnpm --filter @finclust/db exec prisma migrate deploy && pnpm seed",
+    "build:packages": "pnpm --filter @finclust/domain --filter @finclust/db build",
+    "dev": "pnpm build:packages && pnpm --filter @finclust/api --filter @finclust/web --parallel dev",
+    "seed": "pnpm --filter @finclust/api seed",
+    "build": "pnpm build:packages && pnpm --filter @finclust/api --filter @finclust/web build",
+    "start": "pnpm build && pnpm --filter @finclust/api --filter @finclust/web --parallel start:prod",
+    "test": "pnpm -r test",
+    "db:studio": "pnpm --filter @finclust/db exec prisma studio",
+    "db:generate": "pnpm --filter @finclust/db exec prisma generate",
+    "db:migrate": "pnpm --filter @finclust/db exec prisma migrate dev",
+    "audit": "node tools/audit.mjs",
+    "seed:demo": "node tools/seed-demo.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  }
+}

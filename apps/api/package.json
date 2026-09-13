@@ -1,0 +1,40 @@
+{
+  "name": "@finclust/api",
+  "version": "0.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "nest start --watch",
+    "build": "nest build",
+    "test": "vitest run",
+    "seed": "tsx src/seed.ts",
+    "start:prod": "node dist/main.js"
+  },
+  "dependencies": {
+    "@finclust/db": "workspace:*",
+    "@finclust/domain": "workspace:*",
+    "@nestjs/common": "^11.0.10",
+    "@nestjs/core": "^11.0.10",
+    "@nestjs/jwt": "^11.0.0",
+    "@nestjs/platform-express": "^11.0.10",
+    "@nestjs/throttler": "^6.4.0",
+    "@supabase/supabase-js": "^2.48.1",
+    "bcryptjs": "^2.4.3",
+    "class-transformer": "^0.5.1",
+    "class-validator": "^0.14.1",
+    "cookie-parser": "^1.4.7",
+    "reflect-metadata": "^0.2.2",
+    "rxjs": "^7.8.1",
+    "dotenv": "^16.4.7"
+  },
+  "devDependencies": {
+    "@nestjs/cli": "^11.0.2",
+    "@nestjs/testing": "^11.0.10",
+    "@types/bcryptjs": "^2.4.6",
+    "@types/cookie-parser": "^1.4.8",
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.13.1",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.3",
+    "vitest": "^3.0.5"
+  }
+}

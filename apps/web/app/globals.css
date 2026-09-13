@@ -1,0 +1,305 @@
+@import "tailwindcss";
+
+/*
+ * Tokens are the single source of truth from design-system/finclust/MASTER.md.
+ * Nothing in a component should carry a raw hex value.
+ */
+@theme {
+  /* Neutrals are warm. A cold grey next to these tints reads as dirt. */
+  --color-paper: #ffffff;
+  --color-shell: #fffdf8;
+  --color-sand: #f9f6ee;
+  --color-ink: #15140f;
+  --color-body: #4a463d;
+  --color-mid: #6b665c;
+  --color-placeholder: #9b958a;
+  --color-line: #e7e1d3;
+
+  /* Exactly three colours. A fourth is a regression, not an enhancement. */
+  --color-orange: #ff8a1e;
+  --color-orange-tint: #ffc68a;
+  --color-green: #2fbf71;
+  --color-green-tint: #d9f8e7;
+  --color-red: #ff3b30;
+  --color-red-tint: #ffb3ae;
+
+  --radius-chip: 9999px;
+  --radius-input: 10px;
+  --radius-card: 14px;
+  --radius-modal: 20px;
+
+  /* Hard offsets, zero blur. A blurred shadow anywhere here is a bug. */
+  --shadow-hard-sm: 0 2px 0 var(--color-ink);
+  --shadow-hard-md: 0 3px 0 var(--color-ink);
+  --shadow-hard-lg: 0 6px 0 var(--color-ink);
+
+  --font-sans: var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-jetbrains), ui-monospace, monospace;
+}
+
+@layer base {
+  html {
+    -webkit-text-size-adjust: 100%;
+    /* Nothing here is meant to scroll the page sideways: wide content (the
+       board, wide tables) scrolls inside its own container. This must be
+       `hidden`, not `clip` -- only `hidden` propagates from the root element to
+       the viewport, and `clip` was silently doing nothing. Setting it on the
+       root rather than body keeps the sticky admin header working, because the
+       root's own overflow becomes `visible` once it propagates. */
+    overflow-x: hidden;
+  }
+
+  body {
+    background: var(--color-shell);
+    color: var(--color-ink);
+    font-family: var(--font-sans);
+    line-height: 1.5;
+  }
+
+  h1,
+  h2,
+  h3 {
+    line-height: 1.15;
+    letter-spacing: -0.02em;
+    font-weight: 800;
+  }
+
+  /* Ink outline rather than a colour ring: orange cannot carry a focus
+     indicator on white at 2.35:1. */
+  :focus-visible {
+    outline: 2px solid var(--color-ink);
+    outline-offset: 3px;
+  }
+
+  /* Tabular figures everywhere numbers are compared or scanned. */
+  .tnum,
+  input[type="number"] {
+    font-variant-numeric: tabular-nums;
+  }
+}
+
+@layer components {
+  .btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.5rem;
+    min-height: 48px;
+    padding: 0.625rem 1.125rem;
+    border: 2px solid var(--color-ink);
+    border-radius: var(--radius-input);
+    box-shadow: var(--shadow-hard-md);
+    font-weight: 700;
+    font-size: 0.9375rem;
+    cursor: pointer;
+    transition:
+      background-color 180ms ease-out,
+      transform 120ms ease-out,
+      box-shadow 120ms ease-out;
+  }
+
+  /* Presses down by its own shadow offset, so the element appears to depress
+     without moving anything around it. */
+  .btn:active:not(:disabled) {
+    transform: translateY(3px);
+    box-shadow: 0 0 0 var(--color-ink);
+  }
+
+  .btn:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    box-shadow: var(--shadow-hard-sm);
+  }
+
+  /* Ink label, never white: white on orange is 2.35:1 and fails. */
+  .btn-primary {
+    background: var(--color-orange);
+    color: var(--color-ink);
+  }
+  .btn-primary:hover:not(:disabled) {
+    background: #ff9c3d;
+  }
+
+  .btn-secondary {
+    background: var(--color-paper);
+    color: var(--color-ink);
+  }
+  .btn-secondary:hover:not(:disabled) {
+    background: var(--color-sand);
+  }
+
+  .field {
+    width: 100%;
+    min-height: 48px;
+    padding: 0.625rem 0.875rem;
+    background: var(--color-paper);
+    border: 2px solid var(--color-ink);
+    border-radius: var(--radius-input);
+    /* 16px minimum: anything smaller makes iOS zoom on focus. */
+    font-size: 16px;
+    color: var(--color-ink);
+    transition: box-shadow 160ms ease-out;
+  }
+
+  .field::placeholder {
+    color: var(--color-placeholder);
+  }
+
+  .field:focus-visible {
+    outline: none;
+    box-shadow: 0 0 0 3px var(--color-orange-tint);
+  }
+
+  .field[aria-invalid="true"] {
+    border-color: var(--color-red);
+  }
+
+  .card {
+    background: var(--color-paper);
+    border: 2px solid var(--color-ink);
+    border-radius: var(--radius-card);
+    box-shadow: var(--shadow-hard-sm);
+  }
+
+  .label {
+    display: block;
+    font-weight: 600;
+    font-size: 0.875rem;
+    margin-bottom: 0.375rem;
+  }
+
+  .hint {
+    font-size: 0.8125rem;
+    color: var(--color-mid);
+    margin-top: 0.375rem;
+  }
+
+  .error {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.375rem;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    color: #c11a12;
+    margin-top: 0.375rem;
+  }
+
+  /* Small inline action on a card: same ink border and hard shadow as a button,
+     sized for a row of them rather than a primary call to action. */
+  .action {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    /* 44px is the Apple HIG minimum and the difference between tapping a button
+       and tapping near one. */
+    min-height: 44px;
+    padding: 0.5rem 0.875rem;
+    background: var(--color-paper);
+    border: 2px solid var(--color-ink);
+    border-radius: var(--radius-input);
+    box-shadow: var(--shadow-hard-sm);
+    font-size: 0.75rem;
+    font-weight: 700;
+    cursor: pointer;
+    transition:
+      background-color 160ms ease-out,
+      transform 120ms ease-out,
+      box-shadow 120ms ease-out;
+  }
+  .action:hover:not(:disabled) {
+    background: var(--color-sand);
+  }
+  .action:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow: 0 0 0 var(--color-ink);
+  }
+  .action:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    box-shadow: none;
+  }
+
+  /* Any horizontal scroller becomes a containing block, so absolutely
+     positioned children (notably Tailwind's sr-only) cannot escape it and
+     extend the document. See the board scroller for what this prevents. */
+  .overflow-x-auto {
+    position: relative;
+  }
+
+  /* Filters collapse on a phone so the data is reachable without scrolling past
+     six controls, and are always open from tablet up where there is room. Done
+     in CSS rather than JS so there is no flash of the wrong state. */
+  @media (min-width: 640px) {
+    details.filters > div {
+      display: grid !important;
+    }
+  }
+
+  /* summary markers off; the chevron is the affordance */
+  summary::-webkit-details-marker {
+    display: none;
+  }
+
+  .chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.3125rem 0.6875rem;
+    border: 1px solid var(--color-ink);
+    border-radius: var(--radius-chip);
+    font-size: 0.75rem;
+    font-weight: 600;
+    background: var(--color-sand);
+  }
+
+  /* A chip you can press. Same shape, real tap target. */
+  .chip-button {
+    min-height: 44px;
+    padding-inline: 0.9375rem;
+    cursor: pointer;
+    transition:
+      transform 120ms ease-out,
+      box-shadow 120ms ease-out;
+    box-shadow: var(--shadow-hard-sm);
+  }
+  .chip-button:active:not(:disabled) {
+    transform: translateY(2px);
+    box-shadow: 0 0 0 var(--color-ink);
+  }
+  .chip-button:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+  }
+
+  /* Inline text links in headers and breadcrumbs: visually small, but padded
+     out to a real tap target so a thumb can land on them. */
+  .text-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    min-height: 44px;
+    font-size: 0.8125rem;
+    font-weight: 700;
+  }
+
+  /* Small square icon control that still meets 44px. The visual box stays
+     compact; the padding does the work. */
+  .icon-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 44px;
+    min-height: 44px;
+    border-radius: var(--radius-input);
+    cursor: pointer;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}

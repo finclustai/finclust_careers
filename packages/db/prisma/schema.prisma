@@ -1,0 +1,242 @@
+// FINCLUST Recruitment CV Management — Phase 1 schema.
+// Vocabulary: CONTEXT.md. Decisions: docs/adr/.
+// The Application is the central record, not the Resume (ADR-0001).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider   = "postgresql"
+  // Supavisor transaction pooler, connection_limit=1 (ADR-0004).
+  url        = env("DATABASE_URL")
+  // Direct connection, migrations only.
+  directUrl  = env("DIRECT_URL")
+  // Extensions are deliberately NOT managed declaratively. Supabase ships its own
+  // (pgcrypto, supabase_vault, uuid-ossp, pg_stat_statements) in the extensions
+  // schema, which Prisma reads as drift and offers to fix by resetting public --
+  // that would drop them and break Supabase. pg_trgm is created in the migration
+  // SQL instead. See migrations/*/migration.sql.
+}
+
+enum Role {
+  ADMIN
+  RECRUITER
+}
+
+enum JobOpeningStatus {
+  DRAFT
+  ACTIVE
+  ON_HOLD
+  CLOSED
+  CANCELLED
+}
+
+enum WorkMode {
+  ONSITE
+  HYBRID
+  REMOTE
+}
+
+enum EmploymentType {
+  FULL_TIME
+  CONTRACT
+  INTERNSHIP
+}
+
+// Fixed five-value list, so an enum rather than a lookup table.
+enum ApplicationSource {
+  WHATSAPP
+  LINKEDIN
+  WEBSITE
+  REFERRAL
+  OTHER
+}
+
+// Mirrors APPLICATION_STATUSES in @finclust/domain. Both sides are exhaustive
+// over the same nine values; canTransition is the only place legality lives.
+enum ApplicationStatus {
+  NEW
+  SCREENING
+  SHORTLISTED
+  INTERVIEW
+  SELECTED
+  OFFER
+  JOINED
+  REJECTED
+  ON_HOLD
+}
+
+model User {
+  id           String   @id @default(uuid()) @db.Uuid
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  role         Role     @default(RECRUITER)
+  isActive     Boolean  @default(true) @map("is_active")
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  createdJobOpenings   JobOpening[]              @relation("JobOpeningCreatedBy")
+  assignedApplications Application[]             @relation("ApplicationRecruiter")
+  statusChanges        ApplicationStatusHistory[]
+
+  @@map("users")
+}
+
+model JobProfile {
+  id        String   @id @default(uuid()) @db.Uuid
+  name      String   @unique
+  createdAt DateTime @default(now()) @map("created_at")
+
+  jobOpenings JobOpening[]
+
+  @@map("job_profiles")
+}
+
+model JobOpening {
+  id             String           @id @default(uuid()) @db.Uuid
+  // Human-readable, appears in links and references, e.g. EBS-FIN-001.
+  jobId          String           @unique @map("job_id")
+  title          String
+  profileId      String           @map("profile_id") @db.Uuid
+  description    String?
+  requiredSkills String[]         @map("required_skills")
+  client         String?
+  location       String?
+  workMode       WorkMode?        @map("work_mode")
+  employmentType EmploymentType?  @map("employment_type")
+  minExperience  Int?             @map("min_experience")
+  maxExperience  Int?             @map("max_experience")
+  openings       Int              @default(1)
+  status         JobOpeningStatus @default(DRAFT)
+
+  // Per-job counter for the Application Reference. Incremented with
+  // UPDATE ... RETURNING inside the submission transaction, so it cannot race.
+  applicationCounter Int @default(0) @map("application_counter")
+
+  createdById String    @map("created_by") @db.Uuid
+  openedAt    DateTime? @map("opened_at")
+  closesAt    DateTime? @map("closes_at")
+  closedAt    DateTime? @map("closed_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  profile   JobProfile @relation(fields: [profileId], references: [id])
+  createdBy User       @relation("JobOpeningCreatedBy", fields: [createdById], references: [id])
+
+  applicationLinks ApplicationLink[]
+  applications     Application[]
+
+  @@index([status])
+  @@map("job_openings")
+}
+
+model ApplicationLink {
+  id           String            @id @default(uuid()) @db.Uuid
+  jobOpeningId String            @map("job_opening_id") @db.Uuid
+  source       ApplicationSource
+  clickCount   Int               @default(0) @map("click_count")
+  createdAt    DateTime          @default(now()) @map("created_at")
+
+  jobOpening   JobOpening    @relation(fields: [jobOpeningId], references: [id], onDelete: Cascade)
+  applications Application[]
+
+  // One link per job per source. Public links are /apply/<job_id>?source=<source>,
+  // so the pair is the identity and a separate slug column would add nothing.
+  @@unique([jobOpeningId, source])
+  @@map("application_links")
+}
+
+model Candidate {
+  id              String    @id @default(uuid()) @db.Uuid
+  name            String
+  // Identity for a Candidate across every vacancy they apply to.
+  phone           String    @unique
+  email           String?
+  location        String?
+  totalExperience Decimal?  @map("total_experience") @db.Decimal(4, 1)
+  currentCompany  String?   @map("current_company")
+  noticePeriod    String?   @map("notice_period")
+  expectedSalary  String?   @map("expected_salary")
+  linkedinUrl     String?   @map("linkedin_url")
+  skills          String[]
+  // Collected from day one so a later broadcast has a lawful basis (ADR-0005).
+  whatsappOptIn   Boolean   @default(false) @map("whatsapp_opt_in")
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime  @updatedAt @map("updated_at")
+  // No hard deletes, section 37 requires the trail.
+  deletedAt       DateTime? @map("deleted_at")
+
+  applications Application[]
+  resumes      Resume[]
+
+  @@index([email])
+  @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
+  @@map("candidates")
+}
+
+model Application {
+  id                   String            @id @default(uuid()) @db.Uuid
+  // Shown to the Candidate: FIN-<JOB_ID>-000125.
+  applicationReference String            @unique @map("application_reference")
+  candidateId          String            @map("candidate_id") @db.Uuid
+  jobOpeningId         String            @map("job_opening_id") @db.Uuid
+  applicationLinkId    String?           @map("application_link_id") @db.Uuid
+  source               ApplicationSource
+  status               ApplicationStatus @default(NEW)
+  assignedRecruiterId  String?           @map("assigned_recruiter_id") @db.Uuid
+  appliedAt            DateTime          @default(now()) @map("applied_at")
+  updatedAt            DateTime          @updatedAt @map("updated_at")
+  deletedAt            DateTime?         @map("deleted_at")
+
+  candidate         Candidate        @relation(fields: [candidateId], references: [id])
+  jobOpening        JobOpening       @relation(fields: [jobOpeningId], references: [id])
+  applicationLink   ApplicationLink? @relation(fields: [applicationLinkId], references: [id])
+  assignedRecruiter User?            @relation("ApplicationRecruiter", fields: [assignedRecruiterId], references: [id])
+
+  resume        Resume?
+  statusHistory ApplicationStatusHistory[]
+
+  // Re-applying to the same vacancy returns the existing reference rather than
+  // creating a second row. Applying to a different vacancy is always allowed.
+  @@unique([candidateId, jobOpeningId])
+  // The dashboard is almost entirely filtered queries over these three.
+  @@index([status, jobOpeningId, appliedAt])
+  @@index([assignedRecruiterId, status])
+  @@map("applications")
+}
+
+model Resume {
+  id               String   @id @default(uuid()) @db.Uuid
+  candidateId      String   @map("candidate_id") @db.Uuid
+  applicationId    String   @unique @map("application_id") @db.Uuid
+  originalFileName String   @map("original_file_name")
+  fileSize         Int      @map("file_size")
+  // Path inside the private Supabase bucket. Bytes never pass through the API
+  // and are only ever served as short-lived signed URLs (ADR-0003).
+  storagePath      String   @map("storage_path")
+  // No file_type column: PDF only, permanently (ADR-0002).
+  uploadedAt       DateTime @default(now()) @map("uploaded_at")
+
+  candidate   Candidate   @relation(fields: [candidateId], references: [id])
+  application Application @relation(fields: [applicationId], references: [id])
+
+  @@map("resumes")
+}
+
+model ApplicationStatusHistory {
+  id             String             @id @default(uuid()) @db.Uuid
+  applicationId  String             @map("application_id") @db.Uuid
+  previousStatus ApplicationStatus? @map("previous_status")
+  newStatus      ApplicationStatus  @map("new_status")
+  changedById    String             @map("changed_by") @db.Uuid
+  comment        String?
+  changedAt      DateTime           @default(now()) @map("changed_at")
+
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+  changedBy   User        @relation(fields: [changedById], references: [id])
+
+  @@index([applicationId, changedAt])
+  @@map("application_status_history")
+}
