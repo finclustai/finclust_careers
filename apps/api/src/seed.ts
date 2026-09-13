@@ -6,9 +6,13 @@ import { prisma } from "@finclust/db";
  * Idempotent: safe to run against an existing database.
  */
 async function main() {
-  const email = (process.env.SEED_ADMIN_EMAIL ?? "admin@finclust.com").toLowerCase();
+  // Both come from the environment only. The repository is public, so a default
+  // here would publish the admin username.
+  const email = process.env.SEED_ADMIN_EMAIL?.trim().toLowerCase();
   const password = process.env.SEED_ADMIN_PASSWORD;
-  if (!password) throw new Error("Set SEED_ADMIN_PASSWORD before seeding.");
+  if (!email || !password) {
+    throw new Error("Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD before seeding.");
+  }
 
   const admin = await prisma.user.upsert({
     where: { email },

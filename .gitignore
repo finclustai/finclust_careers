@@ -22,3 +22,6 @@ skills-lock.json
 tools/shots/
 
 .scratch/**/draft-*
+
+# internal client requirements: kept locally, never published
+*.docx

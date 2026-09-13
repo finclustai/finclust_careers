@@ -12,8 +12,13 @@ import { readFileSync } from "node:fs";
 
 const BASE = process.env.BASE ?? "http://127.0.0.1:3000";
 const env = readFileSync(".env", "utf8");
-const ADMIN_EMAIL = /^SEED_ADMIN_EMAIL="?(.*?)"?$/m.exec(env)?.[1] ?? "admin@finclust.com";
-const ADMIN_PASSWORD = /^SEED_ADMIN_PASSWORD="?(.*?)"?$/m.exec(env)?.[1] ?? "";
+// Credentials come from .env only; the repository is public.
+const ADMIN_EMAIL = /^SEED_ADMIN_EMAIL="?(.*?)"?$/m.exec(env)?.[1];
+const ADMIN_PASSWORD = /^SEED_ADMIN_PASSWORD="?(.*?)"?$/m.exec(env)?.[1];
+if (!ADMIN_EMAIL || !ADMIN_PASSWORD) {
+  console.error("Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD in .env first.");
+  process.exit(1);
+}
 
 let cookie = "";
 const pass = [];

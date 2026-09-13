@@ -18,9 +18,13 @@ const VIEWPORTS = [
   { name: "desktop", width: 1440, height: 900 },
 ];
 
-function adminPassword() {
+// Credentials come from .env only; the repository is public.
+function adminCredentials() {
   const env = readFileSync(".env", "utf8");
-  return /^SEED_ADMIN_PASSWORD="(.*)"$/m.exec(env)?.[1] ?? "";
+  const email = /^SEED_ADMIN_EMAIL="?(.*?)"?$/m.exec(env)?.[1];
+  const password = /^SEED_ADMIN_PASSWORD="?(.*?)"?$/m.exec(env)?.[1];
+  if (!email || !password) throw new Error("Set SEED_ADMIN_EMAIL and SEED_ADMIN_PASSWORD in .env first.");
+  return { email, password };
 }
 
 /** Runs in the page. Returns every measurable defect on screen. */
@@ -111,8 +115,9 @@ const page = await context.newPage();
 
 // Sign in once; the cookie is reused for every admin route.
 await page.goto(`${BASE}/login`, { waitUntil: "domcontentloaded" });
-await page.fill("#email", "admin@finclust.com");
-await page.fill("#password", adminPassword());
+const { email, password } = adminCredentials();
+await page.fill("#email", email);
+await page.fill("#password", password);
 await Promise.all([page.waitForURL(/\/admin\//, { timeout: 30000 }), page.click('button[type=submit]')]);
 
 mkdirSync(SHOTS, { recursive: true });
