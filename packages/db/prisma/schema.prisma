@@ -3,18 +3,18 @@
 // The Application is the central record, not the Resume (ADR-0001).
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
   // "native" for local development; rhel-openssl-3.0.x is the runtime of a
   // Vercel function. Without it the deployed API cannot find a query engine.
   binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
-  provider   = "postgresql"
+  provider  = "postgresql"
   // Supavisor transaction pooler, connection_limit=1 (ADR-0004).
-  url        = env("DATABASE_URL")
+  url       = env("DATABASE_URL")
   // Direct connection, migrations only.
-  directUrl  = env("DIRECT_URL")
+  directUrl = env("DIRECT_URL")
   // Extensions are deliberately NOT managed declaratively. Supabase ships its own
   // (pgcrypto, supabase_vault, uuid-ossp, pg_stat_statements) in the extensions
   // schema, which Prisma reads as drift and offers to fix by resetting public --
@@ -80,9 +80,13 @@ model User {
   createdAt    DateTime @default(now()) @map("created_at")
   updatedAt    DateTime @updatedAt @map("updated_at")
 
-  createdJobOpenings   JobOpening[]              @relation("JobOpeningCreatedBy")
-  assignedApplications Application[]             @relation("ApplicationRecruiter")
+  createdJobOpenings   JobOpening[]               @relation("JobOpeningCreatedBy")
+  assignedApplications Application[]              @relation("ApplicationRecruiter")
   statusChanges        ApplicationStatusHistory[]
+  notes                CandidateNote[]
+
+  // Drives the "new since your last visit" badges.
+  lastSeenApplicationsAt DateTime? @map("last_seen_applications_at")
 
   @@map("users")
 }
@@ -117,6 +121,12 @@ model JobOpening {
   // Per-job counter for the Application Reference. Incremented with
   // UPDATE ... RETURNING inside the submission transaction, so it cannot race.
   applicationCounter Int @default(0) @map("application_counter")
+
+  // When on, the apply form shows an optional note box above the CV upload.
+  candidateNoteEnabled Boolean @default(false) @map("candidate_note_enabled")
+
+  // Trash: set when deleted, cleared on restore. Permanent delete removes the row.
+  deletedAt DateTime? @map("deleted_at")
 
   createdById String    @map("created_by") @db.Uuid
   openedAt    DateTime? @map("opened_at")
@@ -173,6 +183,7 @@ model Candidate {
 
   applications Application[]
   resumes      Resume[]
+  notes        CandidateNote[]
 
   @@index([email])
   @@index([name(ops: raw("gin_trgm_ops"))], type: Gin)
@@ -192,6 +203,8 @@ model Application {
   appliedAt            DateTime          @default(now()) @map("applied_at")
   updatedAt            DateTime          @updatedAt @map("updated_at")
   deletedAt            DateTime?         @map("deleted_at")
+  // Optional message the candidate typed above the upload box.
+  candidateNote        String?           @map("candidate_note")
 
   candidate         Candidate        @relation(fields: [candidateId], references: [id])
   jobOpening        JobOpening       @relation(fields: [jobOpeningId], references: [id])
@@ -219,7 +232,8 @@ model Resume {
   // Path inside the private Supabase bucket. Bytes never pass through the API
   // and are only ever served as short-lived signed URLs (ADR-0003).
   storagePath      String   @map("storage_path")
-  // No file_type column: PDF only, permanently (ADR-0002).
+  // PDF, DOC or DOCX. Decides whether a CV can preview inline (ADR-0009).
+  mimeType         String   @default("application/pdf") @map("mime_type")
   uploadedAt       DateTime @default(now()) @map("uploaded_at")
 
   candidate   Candidate   @relation(fields: [candidateId], references: [id])
@@ -242,4 +256,20 @@ model ApplicationStatusHistory {
 
   @@index([applicationId, changedAt])
   @@map("application_status_history")
+}
+
+// Internal recruiter notes about a person. Attached to the Candidate rather than
+// one Application, so context carries across every vacancy they apply to.
+model CandidateNote {
+  id          String   @id @default(uuid()) @db.Uuid
+  candidateId String   @map("candidate_id") @db.Uuid
+  authorId    String   @map("author_id") @db.Uuid
+  body        String
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
+  author    User      @relation(fields: [authorId], references: [id])
+
+  @@index([candidateId, createdAt])
+  @@map("candidate_notes")
 }
