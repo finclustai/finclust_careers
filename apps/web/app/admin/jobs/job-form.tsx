@@ -130,8 +130,8 @@ export function JobForm({
         });
       }
 
+      // Admin pages are dynamic, so the push alone loads fresh data.
       router.push(`/admin/jobs/${editing ? job!.id : body.id}`);
-      router.refresh();
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not save the job.");
       setBusy(false);

@@ -1,0 +1,2 @@
+# Test CVs must stay byte-for-byte: the API checks file signatures.
+e2e/fixtures/* binary

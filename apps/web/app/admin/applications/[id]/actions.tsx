@@ -274,7 +274,6 @@ export function DeleteCandidate({
     try {
       await send("DELETE", `/candidates/${candidateId}`);
       router.push("/admin/applications");
-      router.refresh();
     } catch (caught) {
       setError(errorText(caught));
     }

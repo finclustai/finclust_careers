@@ -26,6 +26,11 @@ export function ResumePreview({
   const [urls, setUrls] = useState<{ previewUrl: string | null; downloadUrl: string; previewable: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  // Android Chrome has no built-in PDF viewer: an iframe there silently turns
+  // into a download on every visit, and that download can cancel the next
+  // page navigation. Such browsers get Open and Download buttons instead.
+  const [inlinePdf, setInlinePdf] = useState(true);
+  useEffect(() => setInlinePdf(navigator.pdfViewerEnabled !== false), []);
 
   async function load() {
     setLoading(true);
@@ -56,7 +61,7 @@ export function ResumePreview({
         <h2 className="min-w-0 flex-1 truncate text-sm font-extrabold" title={fileName}>
           {fileName}
         </h2>
-        <span className="tnum shrink-0 text-xs text-mid">{(fileSize / 1024).toFixed(0)} KB</span>
+        <span className="tnum shrink-0 text-xs text-mid">{fileSize < 1024 * 1024 ? `${Math.max(1, Math.round(fileSize / 1024))} KB` : `${(fileSize / 1024 / 1024).toFixed(1)} MB`}</span>
 
         <button
           type="button"
@@ -94,7 +99,11 @@ export function ResumePreview({
         )}
       </header>
 
-      <div className="relative min-h-[70vh] bg-sand lg:min-h-[calc(100vh-220px)]">
+      <div
+        className={`relative bg-sand ${
+          urls && (!urls.previewable || !inlinePdf) ? "min-h-[280px]" : "min-h-[70vh] lg:min-h-[calc(100vh-220px)]"
+        }`}
+      >
         {loading && (
           <p className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-mid">
             <Loader2 size={17} strokeWidth={2.5} aria-hidden className="animate-spin" />
@@ -130,7 +139,25 @@ export function ResumePreview({
           </div>
         )}
 
-        {urls?.previewUrl && !error && (
+        {urls?.previewUrl && !error && !inlinePdf && (
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
+            <FileText size={40} strokeWidth={1.75} aria-hidden className="text-mid" />
+            <p className="text-sm font-bold">PDF</p>
+            <p className="max-w-xs text-sm text-body">This browser can&apos;t show the CV inside the page.</p>
+            <div className="flex flex-wrap justify-center gap-2">
+              <a href={urls.previewUrl} target="_blank" rel="noopener noreferrer" className="btn btn-primary">
+                <ExternalLink size={17} strokeWidth={2.5} aria-hidden />
+                Open CV
+              </a>
+              <a href={urls.downloadUrl} className="btn btn-secondary">
+                <Download size={17} strokeWidth={2.5} aria-hidden />
+                Download
+              </a>
+            </div>
+          </div>
+        )}
+
+        {urls?.previewUrl && !error && inlinePdf && (
           <iframe
             src={`${urls.previewUrl}#view=FitH`}
             title={`CV: ${fileName}`}

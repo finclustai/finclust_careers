@@ -51,7 +51,6 @@ export function JobControls({ jobId, title, status }: { jobId: string; title: st
     try {
       await send("DELETE", `/jobs/${jobId}`);
       router.push("/admin/jobs");
-      router.refresh();
     } catch (caught) {
       setError(errorText(caught));
     }

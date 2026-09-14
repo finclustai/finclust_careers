@@ -34,8 +34,7 @@ export default function LoginPage() {
         return;
       }
 
-      router.push("/admin/jobs");
-      router.refresh();
+      router.push("/admin");
     } catch {
       setError("Could not reach the server. Check your connection.");
       setSubmitting(false);

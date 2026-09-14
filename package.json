@@ -14,9 +14,15 @@
     "db:generate": "pnpm --filter @finclust/db exec prisma generate",
     "db:migrate": "pnpm --filter @finclust/db exec prisma migrate dev",
     "audit": "node tools/audit.mjs",
-    "seed:demo": "node tools/seed-demo.mjs"
+    "seed:demo": "node tools/seed-demo.mjs",
+    "test:e2e": "pnpm build && playwright test",
+    "test:e2e:report": "playwright show-report e2e/.report"
   },
   "devDependencies": {
-    "@playwright/test": "^1.63.0"
+    "@finclust/db": "workspace:*",
+    "@finclust/domain": "workspace:*",
+    "@playwright/test": "^1.63.0",
+    "@supabase/supabase-js": "^2.116.0",
+    "dotenv": "^16.6.1"
   }
 }

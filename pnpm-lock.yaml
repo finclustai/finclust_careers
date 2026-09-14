@@ -8,9 +8,21 @@ importers:
 
   .:
     devDependencies:
+      '@finclust/db':
+        specifier: workspace:*
+        version: link:packages/db
+      '@finclust/domain':
+        specifier: workspace:*
+        version: link:packages/domain
       '@playwright/test':
         specifier: ^1.63.0
         version: 1.63.0
+      '@supabase/supabase-js':
+        specifier: ^2.116.0
+        version: 2.116.0
+      dotenv:
+        specifier: ^16.6.1
+        version: 16.6.1
 
   apps/api:
     dependencies:

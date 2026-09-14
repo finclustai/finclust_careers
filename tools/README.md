@@ -10,10 +10,4 @@ accessible name. Screenshots land in `tools/shots/`.
 
 `ROUTES` overrides the default page list; see the script.
 
-`e2e-candidate.mjs` then `e2e-admin.mjs` walk both journeys end to end: apply
-with a Word CV, check status, then the dashboard, boards, notes, users and
-Trash. The database is shared with the live site, so they run on a temporary
-job and erase everything they created at the end.
-
-    python tools/make-test-docx.py
-    node tools/e2e-candidate.mjs && node tools/e2e-admin.mjs
+End-to-end tests live in `e2e/`; see `e2e/README.md`.

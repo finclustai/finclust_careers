@@ -25,3 +25,9 @@ tools/shots/
 
 # internal client requirements: kept locally, never published
 *.docx
+
+# End-to-end test output and session state
+e2e/.results/
+e2e/.report/
+e2e/.state/
+!e2e/fixtures/*.docx
