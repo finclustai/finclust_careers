@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { AlertCircle, Download, ExternalLink, Loader2, RefreshCw } from "lucide-react";
+import { AlertCircle, Download, ExternalLink, FileText, Loader2, RefreshCw } from "lucide-react";
 
 /**
  * Renders the CV inline from a signed URL. PDF-only (ADR-0002) is what makes
@@ -23,7 +23,7 @@ export function ResumePreview({
 }) {
   // Two URLs, not one: the iframe needs the inline-disposition URL, the download
   // button needs the attachment one. A single URL cannot serve both.
-  const [urls, setUrls] = useState<{ previewUrl: string; downloadUrl: string } | null>(null);
+  const [urls, setUrls] = useState<{ previewUrl: string | null; downloadUrl: string; previewable: boolean } | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -37,7 +37,7 @@ export function ResumePreview({
         throw new Error(body.message ?? "Could not load this CV.");
       }
       const data = await response.json();
-      setUrls({ previewUrl: data.previewUrl, downloadUrl: data.downloadUrl });
+      setUrls({ previewUrl: data.previewUrl, downloadUrl: data.downloadUrl, previewable: data.previewable });
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Could not load this CV.");
     } finally {
@@ -70,6 +70,7 @@ export function ResumePreview({
 
         {urls && (
           <>
+            {urls.previewUrl && (
             <a
               href={urls.previewUrl}
               target="_blank"
@@ -80,6 +81,7 @@ export function ResumePreview({
             >
               <ExternalLink size={13} strokeWidth={2.5} aria-hidden />
             </a>
+            )}
             <a
               href={urls.downloadUrl}
               aria-label={`Download ${fileName}`}
@@ -112,7 +114,23 @@ export function ResumePreview({
           </div>
         )}
 
-        {urls && !error && (
+        {urls && !error && !urls.previewable && (
+          // Word files cannot render in a browser and are never rendered here
+          // anyway, since they may carry active content (ADR-0009).
+          <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-6 text-center">
+            <FileText size={40} strokeWidth={1.75} aria-hidden className="text-mid" />
+            <p className="text-sm font-bold">Word document</p>
+            <p className="max-w-xs text-sm text-body">
+              Word files can&apos;t be previewed in the browser. Download it to open in Word or Google Docs.
+            </p>
+            <a href={urls.downloadUrl} className="btn btn-primary">
+              <Download size={17} strokeWidth={2.5} aria-hidden />
+              Download CV
+            </a>
+          </div>
+        )}
+
+        {urls?.previewUrl && !error && (
           <iframe
             src={`${urls.previewUrl}#view=FitH`}
             title={`CV: ${fileName}`}

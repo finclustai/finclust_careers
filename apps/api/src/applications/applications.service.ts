@@ -1,5 +1,5 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { canTransition, type ApplicationStatus } from "@finclust/domain";
+import { canTransition, isPreviewable, type ApplicationStatus } from "@finclust/domain";
 import { Prisma } from "@finclust/db";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { StorageService } from "../storage/storage.service.js";
@@ -132,7 +132,7 @@ export class ApplicationsService {
         candidate: true,
         jobOpening: { select: { id: true, jobId: true, title: true, client: true } },
         assignedRecruiter: { select: { id: true, name: true } },
-        resume: { select: { id: true, originalFileName: true, fileSize: true, uploadedAt: true } },
+        resume: { select: { id: true, originalFileName: true, fileSize: true, mimeType: true, uploadedAt: true } },
         statusHistory: {
           orderBy: { changedAt: "desc" },
           include: { changedBy: { select: { name: true } } },
@@ -203,20 +203,23 @@ export class ApplicationsService {
       select: {
         applicationReference: true,
         candidate: { select: { name: true } },
-        resume: { select: { storagePath: true, originalFileName: true } },
+        resume: { select: { storagePath: true, originalFileName: true, mimeType: true } },
       },
     });
     if (!application?.resume) throw new NotFoundException("No CV is attached to this application.");
 
+    const { storagePath, mimeType, originalFileName } = application.resume;
     const safeName = application.candidate.name.replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase();
+    const extension = /\.(pdf|docx|doc)$/i.exec(originalFileName)?.[1]?.toLowerCase() ?? "pdf";
+    const previewable = isPreviewable(mimeType);
+
+    // No inline URL is ever minted for a Word file: it could carry active
+    // content, so it may only be downloaded, never rendered (ADR-0009).
     const [previewUrl, downloadUrl] = await Promise.all([
-      this.storage.createSignedUrl(application.resume.storagePath),
-      this.storage.createSignedUrl(
-        application.resume.storagePath,
-        `${safeName}-${application.applicationReference}.pdf`,
-      ),
+      previewable ? this.storage.createSignedUrl(storagePath) : Promise.resolve(null),
+      this.storage.createSignedUrl(storagePath, `${safeName}-${application.applicationReference}.${extension}`),
     ]);
-    return { previewUrl, downloadUrl, expiresInSeconds: 60 };
+    return { previewUrl, downloadUrl, previewable, mimeType, expiresInSeconds: 60 };
   }
 }
 

@@ -1,4 +1,5 @@
-import { CheckCircle2 } from "lucide-react";
+import Link from "next/link";
+import { CheckCircle2, MessageCircle, Search } from "lucide-react";
 import { CopyReference } from "./copy-reference";
 
 export const dynamic = "force-dynamic";
@@ -61,21 +62,62 @@ export default async function SuccessPage({ searchParams }: Props) {
 
           <CopyReference reference={ref} />
 
-          <p className="mt-6 text-sm leading-relaxed text-body">
-            {again
-              ? "We already have your CV for this role, so nothing further is needed. Keep this reference for your records."
-              : "Our recruitment team will review your profile and contact you if your experience matches the requirement."}
-          </p>
+          {/* People close this tab and lose the reference. Sending it to their
+              own WhatsApp ("Message yourself") keeps it somewhere they will find
+              it. wa.me with no number opens the chat picker, so no phone number
+              has to travel in this page's URL. */}
+          <a
+            href={`https://wa.me/?text=${encodeURIComponent(
+              `My FINCLUST application${title ? ` for ${title}` : ""}
+Reference: ${ref}
+Check status: https://careers.finclust.ai/status`,
+            )}`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="btn btn-secondary mt-2.5 w-full"
+          >
+            <MessageCircle size={17} strokeWidth={2.5} aria-hidden />
+            Save to my WhatsApp
+          </a>
 
-          <p className="hint mt-4">
-            Save this reference. Quote it if you contact us about this application.
-          </p>
+          {again ? (
+            <p className="mt-6 text-sm leading-relaxed text-body">
+              We already have your CV for this role, so nothing further is needed.
+            </p>
+          ) : (
+            <div className="mt-6">
+              <h2 className="text-sm font-extrabold">What happens next</h2>
+              <ol className="mt-3 space-y-3">
+                {[
+                  ["Review", "A recruiter reviews your CV against the role."],
+                  ["Shortlist", "If your experience matches, we contact you on the number you gave."],
+                  ["Interview", "Shortlisted candidates are invited to interview."],
+                ].map(([step, text], i) => (
+                  <li key={step} className="flex gap-3 text-sm">
+                    <span className="flex size-6 shrink-0 items-center justify-center rounded-full border-2 border-ink bg-sand text-xs font-extrabold">
+                      {i + 1}
+                    </span>
+                    <span>
+                      <span className="font-bold">{step}.</span>{" "}
+                      <span className="text-body">{text}</span>
+                    </span>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
         </div>
       </div>
 
-      <p className="mt-6 text-center text-xs font-bold uppercase tracking-[0.14em] text-mid">
-        FINCLUST Recruitment
-      </p>
+      <div className="mt-6 flex flex-col items-center gap-1 text-sm">
+        <Link href="/status" className="text-link text-ink">
+          <Search size={14} strokeWidth={2.5} aria-hidden />
+          Check your application status any time
+        </Link>
+        <Link href="/" className="text-link text-mid">
+          See other open roles
+        </Link>
+      </div>
     </main>
   );
 }

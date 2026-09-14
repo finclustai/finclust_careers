@@ -1,9 +1,11 @@
 import { BadRequestException, Injectable, Logger } from "@nestjs/common";
 import { createClient, type SupabaseClient } from "@supabase/supabase-js";
+import { CV_MIME, cvTypeFromName, cvTypeFromSignature, type CvType } from "@finclust/domain";
 import { env } from "../env.js";
 
-const PDF_SIGNATURE = "%PDF-";
 const MAX_BYTES = 10 * 1024 * 1024;
+// Longest signature checked is the 8-byte OLE header of a legacy .doc.
+const SIGNATURE_BYTES = 8;
 
 @Injectable()
 export class StorageService {
@@ -15,12 +17,20 @@ export class StorageService {
   );
 
   /**
-   * The browser uploads straight to storage with this, so resume bytes never
-   * pass through the API (ADR-0003). Our serverless request body cap is 4.5MB
-   * and resumes may be 10MB, so routing them through here is not an option.
+   * The browser uploads straight to storage with this, so CV bytes never pass
+   * through the API (ADR-0003). The serverless request body cap is 4.5MB and a
+   * CV may be 10MB, so routing uploads through here is not an option.
+   *
+   * The file name only picks the stored extension. What the file really is gets
+   * decided later from its bytes (assertStoredCv).
    */
-  async createUploadUrl(jobId: string) {
-    const path = `${jobId}/${crypto.randomUUID()}.pdf`;
+  async createUploadUrl(jobId: string, fileName: string) {
+    const type = cvTypeFromName(fileName);
+    if (!type) {
+      throw new BadRequestException("Upload your CV as a PDF or Word file (.pdf, .doc, .docx).");
+    }
+
+    const path = `${jobId}/${crypto.randomUUID()}.${type}`;
     const { data, error } = await this.client.storage
       .from(env.resumeBucket)
       .createSignedUploadUrl(path);
@@ -33,11 +43,11 @@ export class StorageService {
   }
 
   /**
-   * Confirms the stored object is really a PDF before it is recorded against an
+   * Confirms the stored object is really a CV before it is recorded against an
    * Application. The declared content type came from the browser and is free to
-   * lie, so the first bytes are read back from storage instead.
+   * lie, so the first bytes are read back from storage instead (ADR-0009).
    */
-  async assertStoredPdf(path: string): Promise<number> {
+  async assertStoredCv(path: string): Promise<{ size: number; mimeType: string; type: CvType }> {
     const { data, error } = await this.client.storage.from(env.resumeBucket).info(path);
     if (error || !data) throw new BadRequestException("Upload your CV before submitting.");
 
@@ -50,28 +60,41 @@ export class StorageService {
     }
     if (size > MAX_BYTES) {
       await this.remove(path);
-      throw new BadRequestException("That file is over 10MB. Upload a smaller PDF.");
+      throw new BadRequestException("That file is over 10MB. Upload a smaller file.");
     }
     if (size === 0) {
       await this.remove(path);
       throw new BadRequestException("That file is empty. Upload your CV again.");
     }
 
-    const head = await this.client.storage
-      .from(env.resumeBucket)
-      .download(path, { transform: undefined });
-
-    if (head.error || !head.data) throw new BadRequestException("Could not read the upload. Try again.");
-
-    const signature = new TextDecoder().decode(
-      new Uint8Array(await head.data.slice(0, 5).arrayBuffer()),
-    );
-    if (signature !== PDF_SIGNATURE) {
+    const type = cvTypeFromSignature(await this.readHead(path));
+    if (!type) {
       await this.remove(path);
-      throw new BadRequestException("That file is not a PDF. Export your CV as PDF and try again.");
+      throw new BadRequestException(
+        "That file is not a PDF or Word document. Upload your CV as .pdf, .doc or .docx.",
+      );
     }
 
-    return size;
+    return { size, mimeType: CV_MIME[type], type };
+  }
+
+  /**
+   * Reads only the first bytes of a stored object with an HTTP Range request.
+   * The storage SDK has no ranged download, and downloading a 10MB CV into a
+   * serverless function to inspect eight bytes wastes memory and time on every
+   * single application.
+   */
+  private async readHead(path: string): Promise<Uint8Array> {
+    const url = `${env.supabaseUrl}/storage/v1/object/${env.resumeBucket}/${path}`;
+    const response = await fetch(url, {
+      headers: {
+        Authorization: `Bearer ${env.supabaseSecretKey}`,
+        apikey: env.supabaseSecretKey,
+        Range: `bytes=0-${SIGNATURE_BYTES - 1}`,
+      },
+    });
+    if (!response.ok) throw new BadRequestException("Could not read the upload. Try again.");
+    return new Uint8Array(await response.arrayBuffer()).subarray(0, SIGNATURE_BYTES);
   }
 
   /**
@@ -84,10 +107,10 @@ export class StorageService {
    * viewer. The preview therefore needs the plain URL and the download button
    * needs the attachment one.
    *
-   * Serving a PDF inline is safe here because the bytes were confirmed to start
-   * with %PDF- before the Resume row was written (ADR-0002), the bucket accepts
-   * no other MIME type, storage sends X-Content-Type-Options: nosniff, and the
-   * browser opens it in its sandboxed PDF viewer rather than as a document.
+   * Only PDFs are ever served inline, and only after their bytes were confirmed
+   * to start with %PDF- (ADR-0009). Storage sends X-Content-Type-Options:
+   * nosniff and the browser opens a PDF in its sandboxed viewer. Word files may
+   * carry active content, so callers must always pass `downloadAs` for them.
    */
   async createSignedUrl(path: string, downloadAs?: string) {
     const { data, error } = await this.client.storage
@@ -96,6 +119,13 @@ export class StorageService {
 
     if (error || !data) throw new BadRequestException("Could not prepare that file.");
     return data.signedUrl;
+  }
+
+  /** Erases many objects at once; used by permanent delete (ADR-0011). */
+  async removeMany(paths: string[]): Promise<void> {
+    if (paths.length === 0) return;
+    const { error } = await this.client.storage.from(env.resumeBucket).remove(paths);
+    if (error) this.log.warn(`Could not remove ${paths.length} objects: ${error.message}`);
   }
 
   async remove(path: string): Promise<void> {

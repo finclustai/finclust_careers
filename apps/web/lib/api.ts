@@ -4,19 +4,28 @@
  */
 const SERVER_ORIGIN = process.env.API_ORIGIN ?? "http://127.0.0.1:3001";
 
-export interface JobOpening {
+type WorkMode = "ONSITE" | "HYBRID" | "REMOTE";
+type EmploymentType = "FULL_TIME" | "CONTRACT" | "INTERNSHIP";
+
+/** The fields every public job view shares: a card on the home page, a preview card. */
+export interface PublicJob {
   jobId: string;
   title: string;
-  description: string | null;
   client: string | null;
   location: string | null;
-  workMode: "ONSITE" | "HYBRID" | "REMOTE" | null;
-  employmentType: "FULL_TIME" | "CONTRACT" | "INTERNSHIP" | null;
+  workMode: WorkMode | null;
+  employmentType: EmploymentType | null;
   minExperience: number | null;
   maxExperience: number | null;
-  requiredSkills: string[];
+  openedAt: string | null;
   closesAt: string | null;
   profile: { name: string };
+}
+
+export interface JobOpening extends PublicJob {
+  description: string | null;
+  requiredSkills: string[];
+  candidateNoteEnabled: boolean;
   source: string;
 }
 
@@ -42,7 +51,25 @@ export async function fetchOpening(jobId: string, source?: string): Promise<Open
   return { ok: true, job: await response.json() };
 }
 
-export function experienceBand(job: Pick<JobOpening, "minExperience" | "maxExperience">) {
+/**
+ * Open roles for the home page. Returns null when the roles could not be loaded,
+ * which is deliberately different from an empty list: an API blip must never
+ * tell a candidate "no open roles" when there are some.
+ */
+export async function fetchOpenJobs(): Promise<PublicJob[] | null> {
+  try {
+    const response = await fetch(`${SERVER_ORIGIN}/api/public/jobs`, {
+      // At most one API call a minute across all visitors. The apply page
+      // re-checks the specific job live, so a just-closed role cannot be applied to.
+      next: { revalidate: 60 },
+    });
+    return response.ok ? await response.json() : null;
+  } catch {
+    return null;
+  }
+}
+
+export function experienceBand(job: Pick<PublicJob, "minExperience" | "maxExperience">) {
   const { minExperience: min, maxExperience: max } = job;
   if (min !== null && max !== null) return `${min}–${max} years`;
   if (min !== null) return `${min}+ years`;

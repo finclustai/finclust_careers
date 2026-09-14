@@ -77,6 +77,23 @@ export class ApplyDto {
   @IsOptional()
   @IsBoolean()
   whatsappOptIn?: boolean;
+
+  // Kept only when the job has the note box switched on (ApplyService.apply).
+  @IsOptional()
+  @IsString()
+  @MaxLength(2000, { message: "Keep your note under 2,000 characters." })
+  candidateNote?: string;
+}
+
+export class StatusLookupDto {
+  @IsString()
+  @MinLength(8, { message: "Enter your application reference." })
+  @MaxLength(60)
+  reference!: string;
+
+  @IsString()
+  @MaxLength(30)
+  phone!: string;
 }
 
 export class UploadUrlDto {

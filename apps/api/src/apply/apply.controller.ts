@@ -28,8 +28,8 @@ export class ApplyController {
   @HttpCode(200)
   // Tighter than the form itself: each call reserves a storage slot.
   @Throttle({ default: { limit: 10, ttl: 60_000 } })
-  async createUploadUrl(@Param("jobId") jobId: string, @Body() _dto: UploadUrlDto) {
-    return this.storage.createUploadUrl(jobId.trim().toUpperCase());
+  async createUploadUrl(@Param("jobId") jobId: string, @Body() dto: UploadUrlDto) {
+    return this.storage.createUploadUrl(jobId.trim().toUpperCase(), dto.fileName);
   }
 
   @Post(":jobId")

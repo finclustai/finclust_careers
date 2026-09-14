@@ -1,14 +1,39 @@
+import { BadRequestException, GoneException, Injectable, NotFoundException } from "@nestjs/common";
 import {
-  BadRequestException,
-  GoneException,
-  Injectable,
-  NotFoundException,
-} from "@nestjs/common";
-import { buildApplicationReference, normalisePhone, normaliseSource } from "@finclust/domain";
-import type { ApplicationSource } from "@finclust/domain";
+  buildApplicationReference,
+  candidateFacingStatus,
+  normalisePhone,
+  normaliseSource,
+  type ApplicationSource,
+  type ApplicationStatus,
+} from "@finclust/domain";
+import { Prisma } from "@finclust/db";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { StorageService } from "../storage/storage.service.js";
-import type { ApplyDto } from "./dto.js";
+import type { ApplyDto, StatusLookupDto } from "./dto.js";
+
+/** A job is open to candidates only while active, not trashed and not past its closing date. */
+function openJobsWhere(now = new Date()): Prisma.JobOpeningWhereInput {
+  return {
+    status: "ACTIVE",
+    deletedAt: null,
+    OR: [{ closesAt: null }, { closesAt: { gt: now } }],
+  };
+}
+
+const PUBLIC_JOB_FIELDS = {
+  jobId: true,
+  title: true,
+  client: true,
+  location: true,
+  workMode: true,
+  employmentType: true,
+  minExperience: true,
+  maxExperience: true,
+  openedAt: true,
+  closesAt: true,
+  profile: { select: { name: true } },
+} satisfies Prisma.JobOpeningSelect;
 
 @Injectable()
 export class ApplyService {
@@ -17,25 +42,27 @@ export class ApplyService {
     private readonly storage: StorageService,
   ) {}
 
+  /** Every opening a candidate can apply to right now, for the careers home page. */
+  listOpenJobs() {
+    return this.prisma.client.jobOpening.findMany({
+      where: openJobsWhere(),
+      select: PUBLIC_JOB_FIELDS,
+      orderBy: [{ openedAt: "desc" }, { createdAt: "desc" }],
+      take: 100,
+    });
+  }
+
   /** Everything the public form needs to render, and nothing internal. */
   async getOpening(jobId: string, rawSource: string | undefined) {
-    const job = await this.prisma.client.jobOpening.findUnique({
-      where: { jobId: jobId.trim().toUpperCase() },
+    const job = await this.prisma.client.jobOpening.findFirst({
+      where: { jobId: jobId.trim().toUpperCase(), deletedAt: null },
       select: {
+        ...PUBLIC_JOB_FIELDS,
         id: true,
-        jobId: true,
-        title: true,
-        description: true,
-        client: true,
-        location: true,
-        workMode: true,
-        employmentType: true,
-        minExperience: true,
-        maxExperience: true,
-        requiredSkills: true,
         status: true,
-        closesAt: true,
-        profile: { select: { name: true } },
+        description: true,
+        requiredSkills: true,
+        candidateNoteEnabled: true,
       },
     });
 
@@ -50,9 +77,16 @@ export class ApplyService {
   }
 
   async apply(jobId: string, rawSource: string | undefined, dto: ApplyDto) {
-    const job = await this.prisma.client.jobOpening.findUnique({
-      where: { jobId: jobId.trim().toUpperCase() },
-      select: { id: true, jobId: true, status: true, closesAt: true, title: true },
+    const job = await this.prisma.client.jobOpening.findFirst({
+      where: { jobId: jobId.trim().toUpperCase(), deletedAt: null },
+      select: {
+        id: true,
+        jobId: true,
+        status: true,
+        closesAt: true,
+        title: true,
+        candidateNoteEnabled: true,
+      },
     });
     if (!job) throw new NotFoundException("That job opening does not exist.");
     this.assertOpen(job);
@@ -64,12 +98,15 @@ export class ApplyService {
     }
 
     // The path came from the browser, so the object is confirmed to be a real
-    // PDF in our bucket before anything is written (ADR-0002).
-    const fileSize = await this.storage.assertStoredPdf(dto.resumePath);
+    // PDF or Word file in our bucket before anything is written (ADR-0009).
+    const cv = await this.storage.assertStoredCv(dto.resumePath);
     const source = normaliseSource(rawSource);
+    // A note is only kept when this job asks for one; otherwise it is ignored,
+    // so a crafted request cannot attach text the recruiter never enabled.
+    const candidateNote = job.candidateNoteEnabled ? dto.candidateNote?.trim() || null : null;
 
     const existing = await this.prisma.client.application.findFirst({
-      where: { jobOpeningId: job.id, candidate: { phone } },
+      where: { jobOpeningId: job.id, candidate: { phone }, deletedAt: null },
       select: { applicationReference: true },
     });
 
@@ -105,6 +142,8 @@ export class ApplyService {
           expectedSalary: dto.expectedSalary ?? undefined,
           linkedinUrl: dto.linkedinUrl ?? undefined,
           whatsappOptIn: dto.whatsappOptIn ?? undefined,
+          // Applying again brings a person back out of Trash.
+          deletedAt: null,
         },
         create: {
           phone,
@@ -141,11 +180,13 @@ export class ApplyService {
           jobOpeningId: job.id,
           applicationLinkId: link?.id,
           source,
+          candidateNote,
           resume: {
             create: {
               candidateId: candidate.id,
               originalFileName: dto.resumeFileName,
-              fileSize,
+              fileSize: cv.size,
+              mimeType: cv.mimeType,
               storagePath: dto.resumePath,
             },
           },
@@ -158,6 +199,44 @@ export class ApplyService {
       applicationReference: application.applicationReference,
       jobTitle: job.title,
       alreadyApplied: false,
+    };
+  }
+
+  /**
+   * Lets a candidate check progress with their reference and mobile number.
+   * Both must match, and every failure returns the same message, so this cannot
+   * be used to confirm whether a reference or a phone number exists.
+   */
+  async lookupStatus(dto: StatusLookupDto) {
+    const phone = normalisePhone(dto.phone);
+    const reference = dto.reference.trim().toUpperCase();
+    const notFound = new NotFoundException(
+      "We could not find an application with that reference and mobile number.",
+    );
+    if (!phone) throw notFound;
+
+    const application = await this.prisma.client.application.findFirst({
+      where: {
+        applicationReference: reference,
+        candidate: { phone, deletedAt: null },
+        deletedAt: null,
+        jobOpening: { deletedAt: null },
+      },
+      select: {
+        applicationReference: true,
+        status: true,
+        appliedAt: true,
+        jobOpening: { select: { title: true } },
+      },
+    });
+    if (!application) throw notFound;
+
+    const view = candidateFacingStatus(application.status as ApplicationStatus);
+    return {
+      applicationReference: application.applicationReference,
+      jobTitle: application.jobOpening.title,
+      appliedAt: application.appliedAt,
+      ...view,
     };
   }
 
