@@ -9,6 +9,7 @@ const LINKS = [
   { href: "/admin/board", label: "Board" },
   { href: "/admin/applications", label: "Applications" },
   { href: "/admin/users", label: "Users", adminOnly: true },
+  { href: "/admin/settings", label: "Settings", adminOnly: true },
   { href: "/admin/trash", label: "Trash", adminOnly: true },
 ];
 

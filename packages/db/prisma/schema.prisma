@@ -57,11 +57,12 @@ enum ApplicationSource {
 }
 
 // Mirrors APPLICATION_STATUSES in @finclust/domain. Both sides are exhaustive
-// over the same nine values; canTransition is the only place legality lives.
+// over the same ten values; canTransition is the only place legality lives.
 enum ApplicationStatus {
   NEW
   SCREENING
   SHORTLISTED
+  SENT_TO_CLIENT
   INTERVIEW
   SELECTED
   OFFER
@@ -84,6 +85,7 @@ model User {
   assignedApplications Application[]              @relation("ApplicationRecruiter")
   statusChanges        ApplicationStatusHistory[]
   notes                CandidateNote[]
+  cvShares             CvShare[]
 
   // Drives the "new since your last visit" badges.
   lastSeenApplicationsAt DateTime? @map("last_seen_applications_at")
@@ -140,6 +142,7 @@ model JobOpening {
 
   applicationLinks ApplicationLink[]
   applications     Application[]
+  cvShares         CvShare[]
 
   @@index([status])
   @@map("job_openings")
@@ -213,6 +216,7 @@ model Application {
 
   resume        Resume?
   statusHistory ApplicationStatusHistory[]
+  cvShareItems  CvShareItem[]
 
   // Re-applying to the same vacancy returns the existing reference rather than
   // creating a second row. Applying to a different vacancy is always allowed.
@@ -272,4 +276,45 @@ model CandidateNote {
 
   @@index([candidateId, createdAt])
   @@map("candidate_notes")
+}
+
+// One "share CVs" action: a draft created in the company Zoho mailbox holding
+// the CVs of one or more Applications for the same Job Opening (ADR-0012).
+model CvShare {
+  id            String   @id @default(uuid()) @db.Uuid
+  jobOpeningId  String   @map("job_opening_id") @db.Uuid
+  toAddresses   String[] @map("to_addresses")
+  ccAddresses   String[] @map("cc_addresses")
+  subject       String
+  zohoMessageId String?  @map("zoho_message_id")
+  createdById   String   @map("created_by") @db.Uuid
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  jobOpening JobOpening    @relation(fields: [jobOpeningId], references: [id], onDelete: Cascade)
+  createdBy  User          @relation(fields: [createdById], references: [id])
+  items      CvShareItem[]
+
+  @@index([createdAt])
+  @@map("cv_shares")
+}
+
+model CvShareItem {
+  shareId       String @map("share_id") @db.Uuid
+  applicationId String @map("application_id") @db.Uuid
+
+  share       CvShare     @relation(fields: [shareId], references: [id], onDelete: Cascade)
+  application Application @relation(fields: [applicationId], references: [id], onDelete: Cascade)
+
+  @@id([shareId, applicationId])
+  @@index([applicationId])
+  @@map("cv_share_items")
+}
+
+// Small admin-editable settings, such as the CV share email template.
+model Setting {
+  key       String   @id
+  value     Json
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("settings")
 }

@@ -15,8 +15,9 @@ import {
 } from "@dnd-kit/core";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
-import { AlertCircle, GripVertical, Phone, Search, Undo2, X } from "lucide-react";
+import { createContext, useContext, useEffect, useMemo, useState } from "react";
+import { AlertCircle, CheckSquare, GripVertical, Mail, Phone, Search, Undo2, X } from "lucide-react";
+import { ShareDialog } from "@/components/share-dialog";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 import {
   APPLICATION_STATUSES,
@@ -44,6 +45,10 @@ export interface Card {
   jobOpening: { id: string; jobId: string; title: string };
 }
 
+// Which cards are ticked for sharing. A context, so the columns and cards in
+// between do not each pass it along.
+const Selection = createContext<{ selected: Set<string>; toggle: (id: string) => void } | null>(null);
+
 /**
  * One job's board, or with `combined` every job's on one board (ADR-0010). The
  * combined board labels each card with its job and can filter to one.
@@ -63,6 +68,33 @@ export function Board({
   const [search, setSearch] = useState("");
   const [jobFilter, setJobFilter] = useState("");
   const [undo, setUndo] = useState<{ card: Card; from: ApplicationStatus; to: ApplicationStatus } | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [sharing, setSharing] = useState(false);
+
+  const selection = useMemo(
+    () =>
+      selecting
+        ? {
+            selected,
+            toggle: (id: string) =>
+              setSelected((current) => {
+                const next = new Set(current);
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+                return next;
+              }),
+          }
+        : null,
+    [selecting, selected],
+  );
+  const selectedCards = cards.filter((c) => selected.has(c.id));
+  const selectedJobs = new Set(selectedCards.map((c) => c.jobOpening.id)).size;
+
+  function stopSelecting() {
+    setSelecting(false);
+    setSelected(new Set());
+  }
 
   const jobs = useMemo(
     () => [...new Map(initialCards.map((c) => [c.jobOpening.id, c.jobOpening])).values()],
@@ -158,6 +190,15 @@ export function Board({
             className="field !min-h-[44px] !pl-9"
           />
         </label>
+        <button
+          type="button"
+          onClick={() => (selecting ? stopSelecting() : setSelecting(true))}
+          aria-pressed={selecting}
+          className={`btn !min-h-[44px] ${selecting ? "btn-primary" : "btn-secondary"}`}
+        >
+          <CheckSquare size={16} strokeWidth={2.5} aria-hidden />
+          {selecting ? "Cancel selecting" : "Select to share"}
+        </button>
         {combined && jobs.length > 1 && (
           <label className="min-w-0 flex-1 basis-60 sm:max-w-xs">
             <span className="sr-only">Show one job</span>
@@ -178,7 +219,38 @@ export function Board({
         </p>
       )}
 
-      {undo && (
+      {selecting && (
+        <div className="fixed inset-x-3 bottom-3 z-30 mx-auto flex max-w-md flex-wrap items-center gap-2 rounded-[14px] border-2 border-ink bg-paper p-2 pl-4 shadow-[0_4px_0_var(--color-ink)]">
+          <span className="min-w-0 flex-1 text-sm">
+            <strong className="tnum">{selected.size}</strong> selected
+            {selectedJobs > 1 && <span className="block text-xs text-[#c11a12]">Pick CVs from one job</span>}
+          </span>
+          <button
+            type="button"
+            disabled={selected.size === 0 || selectedJobs > 1}
+            onClick={() => setSharing(true)}
+            className="btn btn-primary !min-h-[44px]"
+          >
+            <Mail size={16} strokeWidth={2.5} aria-hidden />
+            Share CVs
+          </button>
+        </div>
+      )}
+      {sharing && (
+        <ShareDialog
+          applications={selectedCards.map((c) => ({ id: c.id, name: c.candidate.name }))}
+          onClose={(shared) => {
+            setSharing(false);
+            if (shared) {
+              // The draft moved some cards on; reload the board to show where.
+              stopSelecting();
+              window.location.reload();
+            }
+          }}
+        />
+      )}
+
+      {undo && !selecting && (
         <div
           role="status"
           className="fixed inset-x-3 bottom-3 z-30 mx-auto flex max-w-md items-center gap-3 rounded-[14px] border-2 border-ink bg-ink p-2 pl-4 text-sm text-paper shadow-[0_4px_0_var(--color-orange)]"
@@ -211,6 +283,7 @@ export function Board({
         </p>
       )}
 
+      <Selection.Provider value={selection}>
       <DndContext
         sensors={sensors}
         collisionDetection={closestCorners}
@@ -241,6 +314,9 @@ export function Board({
           {dragging && <CardFace card={dragging} combined={combined} lifted />}
         </DragOverlay>
       </DndContext>
+      </Selection.Provider>
+      {/* Room to scroll the last cards out from under the selection bar. */}
+      {selecting && <div className="h-20" aria-hidden />}
     </>
   );
 }
@@ -351,6 +427,7 @@ function CardFace({
   lifted?: boolean;
 }) {
   const router = useRouter();
+  const selection = useContext(Selection);
   // Every stage but the current one (ADR-0008).
   const destinations = APPLICATION_STATUSES.filter((s) => canTransition(card.status, s));
   const experience = card.candidate.totalExperience;
@@ -368,6 +445,17 @@ function CardFace({
         lifted ? "rotate-2 shadow-[0_6px_0_var(--color-ink)]" : "shadow-[0_2px_0_var(--color-ink)]",
       ].join(" ")}
     >
+      {selection && onMove && (
+        <label className="-mx-1 -mt-1 mb-1 flex min-h-[44px] cursor-pointer items-center gap-2.5 rounded-[8px] px-1 text-xs font-bold hover:bg-sand">
+          <input
+            type="checkbox"
+            checked={selection.selected.has(card.id)}
+            onChange={() => selection.toggle(card.id)}
+            className="size-5 accent-[#ff8a1e]"
+          />
+          Select {card.candidate.name.split(" ")[0]}
+        </label>
+      )}
       <div className="flex items-start gap-1.5">
         <button
           type="button"

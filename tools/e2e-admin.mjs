@@ -6,6 +6,9 @@
  * candidate for good through Trash, which is also the cleanup.
  *
  *   node tools/e2e-candidate.mjs && node tools/e2e-admin.mjs
+ *
+ * Set E2E_SHARE_TO=you@company.com to also test sharing a CV by email. That
+ * leaves a real draft in the Zoho mailbox, so it is off unless asked for.
  */
 import { chromium } from "@playwright/test";
 import { readFileSync } from "node:fs";
@@ -88,6 +91,28 @@ await page.screenshot({ path: `${SHOTS}/admin-application.png`, fullPage: true }
 await page.setViewportSize({ width: 375, height: 812 });
 check("detail has no side-scroll on phone", await noSideScroll(page));
 await page.setViewportSize({ width: 1280, height: 900 });
+
+if (process.env.E2E_SHARE_TO) {
+  console.log("\nShare CV by email");
+  await page.goto(`${BASE}/admin/jobs`, { waitUntil: "networkidle" });
+  const testBoard = await page.evaluate(async (id) => {
+    const r = await fetch("/api/jobs?pageSize=100");
+    return (await r.json()).items.find((j) => j.jobId === id)?.id;
+  }, jobId);
+  await page.goto(`${BASE}/admin/jobs/${testBoard}/board`, { waitUntil: "networkidle" });
+  await page.getByRole("button", { name: "Select to share" }).click();
+  await page.locator("article").filter({ hasText: "E2E Test Candidate" }).getByRole("checkbox").check();
+  await page.getByRole("button", { name: "Share CVs" }).click();
+  await page.fill("#share-to", process.env.E2E_SHARE_TO);
+  await page.getByRole("button", { name: "Create draft in Zoho Mail" }).click();
+  await page.getByRole("link", { name: "Open drafts in Zoho Mail" }).waitFor({ timeout: 60000 }).catch(() => {});
+  check("draft created in Zoho", await page.getByRole("link", { name: "Open drafts in Zoho Mail" }).isVisible(),
+    (await page.locator("dialog [role=alert]").textContent().catch(() => "")) ?? "");
+  await page.goto(`${BASE}/admin/applications/${appId}`, { waitUntil: "networkidle" });
+  check("share recorded on the application", await page.getByText(process.env.E2E_SHARE_TO).first().isVisible());
+  const statusAfter = await page.evaluate(async (id) => (await (await fetch(`/api/applications/${id}`)).json()).status, appId);
+  check("sharing leaves a rejected candidate rejected", statusAfter === "REJECTED", statusAfter);
+}
 
 console.log("\nJobs");
 await page.goto(`${BASE}/admin/jobs`, { waitUntil: "networkidle" });

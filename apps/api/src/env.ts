@@ -22,4 +22,14 @@ export const env = {
   supabaseSecretKey: required("SUPABASE_SECRET_KEY"),
   resumeBucket: process.env.SUPABASE_RESUME_BUCKET ?? "resumes",
   isProduction: process.env.NODE_ENV === "production",
+  // Optional: without these, sharing CVs by email is switched off, not broken.
+  zoho: process.env.ZOHO_REFRESH_TOKEN
+    ? {
+        accountsUrl: process.env.ZOHO_ACCOUNTS_URL ?? "https://accounts.zoho.in",
+        mailApiUrl: process.env.ZOHO_MAIL_API_URL ?? "https://mail.zoho.in",
+        clientId: required("ZOHO_CLIENT_ID"),
+        clientSecret: required("ZOHO_CLIENT_SECRET"),
+        refreshToken: process.env.ZOHO_REFRESH_TOKEN,
+      }
+    : null,
 };

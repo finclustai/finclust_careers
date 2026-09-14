@@ -76,7 +76,7 @@ _Avoid_: platform, channel, medium, referrer
 
 **Application Status**:
 Where one Application sits in the pipeline: New, Screening, Shortlisted,
-Interview, Selected, Offer, Joined, Rejected or On Hold. It belongs to the
+Sent to Client, Interview, Selected, Offer, Joined, Rejected or On Hold. It belongs to the
 Application, not the Candidate — the same person can be Shortlisted for one
 vacancy and Rejected for another at the same time.
 _Avoid_: candidate status, stage, state
@@ -85,3 +85,16 @@ _Avoid_: candidate status, stage, state
 A recorded transition of one Application from one Application Status to another,
 capturing who changed it, when, and why.
 _Avoid_: status update, transition log, history entry
+
+### Sharing
+
+**CV Share**:
+One act of sending the CVs of one or more Applications for the same Job Opening
+to people outside FINCLUST, usually a Client. It is created as a draft in the
+company Zoho mailbox and sent from there (ADR-0012).
+_Avoid_: forward, export, send resumes
+
+**Sent to Client**:
+The Application Status after a CV Share: the candidate's CV is with the Client,
+and the next step is the Client's decision on an interview.
+_Avoid_: submitted, forwarded

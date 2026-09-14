@@ -121,6 +121,13 @@ export class StorageService {
     return data.signedUrl;
   }
 
+  /** The whole file, for attaching to an email. Only ever called after a role check. */
+  async download(path: string): Promise<Buffer> {
+    const { data, error } = await this.client.storage.from(env.resumeBucket).download(path);
+    if (error || !data) throw new BadRequestException("Could not read a stored CV. Try again.");
+    return Buffer.from(await data.arrayBuffer());
+  }
+
   /** Erases many objects at once; used by permanent delete (ADR-0011). */
   async removeMany(paths: string[]): Promise<void> {
     if (paths.length === 0) return;

@@ -8,6 +8,7 @@ describe("candidateFacingStatus", () => {
     ["SCREENING", "in_review"],
     ["ON_HOLD", "in_review"],
     ["SHORTLISTED", "shortlisted"],
+    ["SENT_TO_CLIENT", "shortlisted"],
     ["INTERVIEW", "interview"],
     ["SELECTED", "selected"],
     ["OFFER", "selected"],

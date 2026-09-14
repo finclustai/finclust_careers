@@ -35,6 +35,14 @@ const VIEWS: Record<ApplicationStatus, CandidateStatusView> = {
     detail: "Your profile has been shortlisted. We will contact you about next steps.",
     tone: "neutral",
   },
+  // Being put in front of a client is internal detail; to the candidate it is
+  // still a shortlist.
+  SENT_TO_CLIENT: {
+    stage: "shortlisted",
+    label: "Shortlisted",
+    detail: "Your profile has been shortlisted. We will contact you about next steps.",
+    tone: "neutral",
+  },
   INTERVIEW: {
     stage: "interview",
     label: "Interview stage",

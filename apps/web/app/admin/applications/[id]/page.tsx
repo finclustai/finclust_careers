@@ -5,6 +5,7 @@ import { SOURCE_LABEL, STATUS_STYLE, type ApplicationStatus } from "@/lib/status
 import { AssignControl, DeleteCandidate, Notes, StatusControl, StepNav } from "./actions";
 import { ResumePreview } from "./resume-preview";
 import { WhatsAppButton } from "@/components/whatsapp-button";
+import { ShareButton } from "@/components/share-button";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,9 @@ interface Detail {
   source: string;
   appliedAt: string;
   candidateNote: string | null;
+  cvShareItems: {
+    share: { id: string; createdAt: string; toAddresses: string[]; ccAddresses: string[]; createdBy: { name: string } };
+  }[];
   previousId: string | null;
   nextId: string | null;
   otherApplications: {
@@ -130,6 +134,29 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
 
           <section className="card p-4">
             <StatusControl applicationId={app.id} current={app.status} />
+          </section>
+
+          <section className="card p-4">
+            <h2 className="text-sm font-extrabold">Share with a client</h2>
+            <p className="hint mb-3">Creates a draft in Zoho Mail with this CV attached.</p>
+            {app.resume ? (
+              <ShareButton applicationId={app.id} name={c.name} />
+            ) : (
+              <p className="text-sm text-mid">No CV to share.</p>
+            )}
+            {app.cvShareItems.length > 0 && (
+              <ul className="mt-3 space-y-2 border-t-2 border-line pt-3">
+                {app.cvShareItems.map(({ share }) => (
+                  <li key={share.id} className="text-sm">
+                    <p className="break-words font-semibold">{[...share.toAddresses, ...share.ccAddresses].join(", ")}</p>
+                    <p className="text-xs text-mid">
+                      {share.createdBy.name} ·{" "}
+                      {new Date(share.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
+                    </p>
+                  </li>
+                ))}
+              </ul>
+            )}
           </section>
           <section className="card p-4">
             <h2 className="text-sm font-extrabold">Candidate details</h2>

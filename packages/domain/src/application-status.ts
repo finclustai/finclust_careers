@@ -2,6 +2,7 @@ export const APPLICATION_STATUSES = [
   "NEW",
   "SCREENING",
   "SHORTLISTED",
+  "SENT_TO_CLIENT",
   "INTERVIEW",
   "SELECTED",
   "OFFER",

@@ -36,7 +36,7 @@ export class ApplicationsService {
    * what is assigned to them, and no controller can forget to apply it because
    * every query in this service starts from this clause.
    */
-  private scope(user: SessionUser): Prisma.ApplicationWhereInput {
+  scope(user: SessionUser): Prisma.ApplicationWhereInput {
     // Anything in Trash -- the job or the candidate -- is hidden everywhere.
     const base: Prisma.ApplicationWhereInput = {
       deletedAt: null,
@@ -156,6 +156,14 @@ export class ApplicationsService {
         statusHistory: {
           orderBy: { changedAt: "desc" },
           include: { changedBy: { select: { name: true } } },
+        },
+        cvShareItems: {
+          orderBy: { share: { createdAt: "desc" } },
+          select: {
+            share: {
+              select: { id: true, createdAt: true, toAddresses: true, ccAddresses: true, createdBy: { select: { name: true } } },
+            },
+          },
         },
       },
     });

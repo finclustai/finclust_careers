@@ -32,6 +32,13 @@ export const STATUS_STYLE: Record<
     well: "bg-sand",
     dot: "bg-body",
   },
+  // Out with the client: further along than a shortlist, short of an interview.
+  SENT_TO_CLIENT: {
+    label: "Sent to client",
+    chip: "bg-body text-paper border-ink",
+    well: "bg-sand",
+    dot: "bg-body",
+  },
   INTERVIEW: {
     label: "Interview",
     chip: "bg-ink text-paper border-ink",
