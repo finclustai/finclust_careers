@@ -261,8 +261,6 @@ export function ApplyForm({
           </div>
         )}
 
-        <ResumeField state={upload} error={errors.resume} inputRef={fileInput} onPick={handleFile} onClear={clearFile} />
-
         <div>
           <button
             type="button"
@@ -284,6 +282,8 @@ export function ApplyForm({
             </div>
           )}
         </div>
+
+        <ResumeField state={upload} error={errors.resume} inputRef={fileInput} onPick={handleFile} onClear={clearFile} />
 
         <label className="flex min-h-[44px] cursor-pointer items-start gap-3 rounded-[10px] border-2 border-ink bg-sand p-3.5">
           <input type="checkbox" name="whatsappOptIn" className="mt-0.5 size-6 shrink-0 accent-[#ff8a1e]" />

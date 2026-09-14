@@ -31,7 +31,7 @@ export class JobsService {
           maxExperience: dto.maxExperience,
           openings: dto.openings ?? 1,
           closesAt: dto.closesAt ? new Date(dto.closesAt) : null,
-          candidateNoteEnabled: dto.candidateNoteEnabled ?? false,
+          candidateNoteEnabled: dto.candidateNoteEnabled ?? true,
           createdById,
         },
         include: { profile: true },

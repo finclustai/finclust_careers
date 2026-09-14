@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { APPLICATION_SOURCES, type ApplicationSource } from "@finclust/domain";
+import { APPLICATION_SOURCES, buildWhatsappPost, type ApplicationSource, type PostableJob } from "@finclust/domain";
 
 export interface ShareLink {
   source: ApplicationSource;
@@ -14,13 +14,8 @@ export interface ShareKit {
   whatsappShareUrl: string;
 }
 
-interface ShareableJob {
+interface ShareableJob extends PostableJob {
   jobId: string;
-  title: string;
-  client: string | null;
-  location: string | null;
-  minExperience: number | null;
-  maxExperience: number | null;
   applicationLinks?: { source: ApplicationSource; clickCount: number }[];
 }
 
@@ -36,7 +31,7 @@ export class PublicLinksService {
       clickCount: counts.get(source) ?? 0,
     }));
 
-    const message = this.whatsappMessage(job);
+    const message = buildWhatsappPost(job, this.applyUrl(job.jobId, "WHATSAPP"));
     return {
       links,
       whatsappMessage: message,
@@ -46,25 +41,5 @@ export class PublicLinksService {
 
   private applyUrl(jobId: string, source: ApplicationSource): string {
     return `${this.origin}/apply/${jobId}?source=${source.toLowerCase()}`;
-  }
-
-  private whatsappMessage(job: ShareableJob): string {
-    const lines = [`*${job.title}*`];
-    if (job.client) lines.push(`Client: ${job.client}`);
-    if (job.location) lines.push(`Location: ${job.location}`);
-
-    const experience = this.experienceBand(job);
-    if (experience) lines.push(`Experience: ${experience}`);
-
-    lines.push("", "Apply here:", this.applyUrl(job.jobId, "WHATSAPP"), "", "— FINCLUST Recruitment");
-    return lines.join("\n");
-  }
-
-  private experienceBand(job: ShareableJob): string | null {
-    const { minExperience: min, maxExperience: max } = job;
-    if (min !== null && max !== null) return `${min}-${max} years`;
-    if (min !== null) return `${min}+ years`;
-    if (max !== null) return `up to ${max} years`;
-    return null;
   }
 }

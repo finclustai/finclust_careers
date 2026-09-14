@@ -234,7 +234,7 @@ export function JobForm({
         <input
           type="checkbox"
           name="candidateNoteEnabled"
-          defaultChecked={job?.candidateNoteEnabled ?? false}
+          defaultChecked={job?.candidateNoteEnabled ?? true}
           className="mt-0.5 size-6 shrink-0 accent-[#ff8a1e]"
         />
         <span className="text-sm">
