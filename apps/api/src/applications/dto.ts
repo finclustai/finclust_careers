@@ -1,5 +1,5 @@
 import { Type } from "class-transformer";
-import { IsEnum, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Max, MaxLength, Min } from "class-validator";
+import { IsEnum, IsInt, IsISO8601, IsOptional, IsString, IsUUID, Max, MaxLength, Min, MinLength } from "class-validator";
 import { APPLICATION_STATUSES, type ApplicationStatus } from "@finclust/domain";
 
 const SOURCES = ["WHATSAPP", "LINKEDIN", "WEBSITE", "REFERRAL", "OTHER"] as const;
@@ -32,4 +32,16 @@ export class ListApplicationsQueryDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) page?: number;
   // Capped: an uncapped page size is a free full-table scan for any caller.
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(100) pageSize?: number;
+}
+
+export class NoteDto {
+  @IsString()
+  @MinLength(1, { message: "Write a note first." })
+  @MaxLength(4000)
+  body!: string;
+}
+
+export class AssignDto {
+  // null or absent unassigns.
+  @IsOptional() @IsUUID() recruiterId?: string | null;
 }

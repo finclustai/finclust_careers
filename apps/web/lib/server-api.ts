@@ -1,3 +1,4 @@
+import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 
@@ -21,3 +22,13 @@ export async function apiGet<T>(path: string): Promise<T> {
   }
   return response.json() as Promise<T>;
 }
+
+export interface SessionUser {
+  id: string;
+  name: string;
+  email: string;
+  role: "ADMIN" | "RECRUITER";
+}
+
+/** The signed-in user, fetched once per request however many components ask. */
+export const getSession = cache(() => apiGet<SessionUser>("/auth/me"));

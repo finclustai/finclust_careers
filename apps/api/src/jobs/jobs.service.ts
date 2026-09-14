@@ -6,6 +6,9 @@ import type { CreateJobOpeningDto, ListJobsQueryDto, UpdateJobOpeningDto } from 
 
 const DEFAULT_PAGE_SIZE = 25;
 
+// Counts leave out applications whose candidate is in Trash.
+const LIVE_APPLICATION = { deletedAt: null, candidate: { deletedAt: null } } satisfies Prisma.ApplicationWhereInput;
+
 @Injectable()
 export class JobsService {
   constructor(private readonly prisma: PrismaService) {}
@@ -28,6 +31,7 @@ export class JobsService {
           maxExperience: dto.maxExperience,
           openings: dto.openings ?? 1,
           closesAt: dto.closesAt ? new Date(dto.closesAt) : null,
+          candidateNoteEnabled: dto.candidateNoteEnabled ?? false,
           createdById,
         },
         include: { profile: true },
@@ -51,6 +55,7 @@ export class JobsService {
     const search = query.search?.trim();
 
     const where: Prisma.JobOpeningWhereInput = {
+      deletedAt: null,
       ...(query.status ? { status: query.status } : {}),
       ...(search
         ? {
@@ -68,7 +73,7 @@ export class JobsService {
     const [items, total] = await this.prisma.client.$transaction([
       this.prisma.client.jobOpening.findMany({
         where,
-        include: { profile: true, _count: { select: { applications: true } } },
+        include: { profile: true, _count: { select: { applications: { where: LIVE_APPLICATION } } } },
         orderBy: { createdAt: "desc" },
         skip: (page - 1) * pageSize,
         take: pageSize,
@@ -80,12 +85,12 @@ export class JobsService {
   }
 
   async findOne(id: string) {
-    const job = await this.prisma.client.jobOpening.findUnique({
-      where: { id },
+    const job = await this.prisma.client.jobOpening.findFirst({
+      where: { id, deletedAt: null },
       include: {
         profile: true,
         applicationLinks: { orderBy: { source: "asc" } },
-        _count: { select: { applications: true } },
+        _count: { select: { applications: { where: LIVE_APPLICATION } } },
       },
     });
     if (!job) throw new NotFoundException("That job opening does not exist.");
@@ -109,7 +114,8 @@ export class JobsService {
         minExperience: dto.minExperience,
         maxExperience: dto.maxExperience,
         openings: dto.openings,
-        closesAt: dto.closesAt ? new Date(dto.closesAt) : undefined,
+        closesAt: dto.closesAt === undefined ? undefined : dto.closesAt ? new Date(dto.closesAt) : null,
+        candidateNoteEnabled: dto.candidateNoteEnabled,
       },
       include: { profile: true },
     });

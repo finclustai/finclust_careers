@@ -23,7 +23,11 @@ export interface JobValues {
   maxExperience?: number | null;
   openings?: number | null;
   requiredSkills?: string[];
+  candidateNoteEnabled?: boolean;
+  closesAt?: string | null;
 }
+
+const IST_DATE = new Intl.DateTimeFormat("en-CA", { timeZone: "Asia/Kolkata" });
 
 // Sentinel for the "Other…" option. Not a real id, so it can never collide.
 const OTHER = "__other__";
@@ -33,10 +37,12 @@ export function JobForm({
   job,
 }: {
   profiles: Profile[];
+  /** Existing job to edit, or with no id, a job to copy into a new one. */
   job?: JobValues;
 }) {
   const router = useRouter();
   const editing = Boolean(job?.id);
+  const closesOn = job?.closesAt ? IST_DATE.format(new Date(job.closesAt)) : "";
 
   const [profiles, setProfiles] = useState(initialProfiles);
   const [profileId, setProfileId] = useState(job?.profileId ?? "");
@@ -97,6 +103,9 @@ export function JobForm({
         openings: number("openings"),
         requiredSkills:
           text("requiredSkills")?.split(",").map((s) => s.trim()).filter(Boolean) ?? [],
+        candidateNoteEnabled: data.get("candidateNoteEnabled") === "on",
+        // The end of the chosen day in India. Blank clears an existing date.
+        closesAt: text("closesAt") ? `${text("closesAt")}T23:59:59+05:30` : editing ? null : undefined,
       };
       // jobId is immutable: it is baked into every reference already issued and
       // every link already shared.
@@ -201,6 +210,8 @@ export function JobForm({
           defaultValue={job?.minExperience ?? ""} />
         <Text name="maxExperience" label="Maximum experience (years)" type="number" min="0" max="60"
           defaultValue={job?.maxExperience ?? ""} />
+        <Text name="closesAt" label="Stop collecting after" type="date" defaultValue={closesOn}
+          hint="Optional. Applications close automatically at the end of this day." />
       </div>
 
       <div className="mt-4">
@@ -217,6 +228,21 @@ export function JobForm({
           className="field"
           placeholder="What the role involves, responsibilities, what you are looking for…"
         />
+      </label>
+
+      <label className="mt-4 flex min-h-[44px] cursor-pointer items-start gap-3 rounded-[10px] border-2 border-ink bg-paper p-3.5">
+        <input
+          type="checkbox"
+          name="candidateNoteEnabled"
+          defaultChecked={job?.candidateNoteEnabled ?? false}
+          className="mt-0.5 size-6 shrink-0 accent-[#ff8a1e]"
+        />
+        <span className="text-sm">
+          Ask candidates for a note
+          <span className="hint block">
+            Shows an optional box above the CV upload for anything they want to add, like notice period or a short cover note.
+          </span>
+        </span>
       </label>
 
       {!editing && (

@@ -49,7 +49,6 @@ export default async function BoardPage({ params }: { params: Promise<{ id: stri
         <Board
           initialCards={data.cards}
           columnPageSize={data.columnPageSize}
-          jobTitle={data.job.title}
         />
         </>
       )}

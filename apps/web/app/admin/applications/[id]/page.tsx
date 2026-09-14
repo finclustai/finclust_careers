@@ -1,8 +1,8 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { apiGet } from "@/lib/server-api";
+import { apiGet, getSession } from "@/lib/server-api";
 import { SOURCE_LABEL, STATUS_STYLE, type ApplicationStatus } from "@/lib/status";
-import { StatusControl } from "./actions";
+import { AssignControl, DeleteCandidate, Notes, StatusControl, StepNav } from "./actions";
 import { ResumePreview } from "./resume-preview";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 
@@ -14,7 +14,17 @@ interface Detail {
   status: ApplicationStatus;
   source: string;
   appliedAt: string;
+  candidateNote: string | null;
+  previousId: string | null;
+  nextId: string | null;
+  otherApplications: {
+    id: string;
+    status: ApplicationStatus;
+    appliedAt: string;
+    jobOpening: { jobId: string; title: string };
+  }[];
   candidate: {
+    id: string;
     name: string;
     phone: string;
     email: string | null;
@@ -25,6 +35,7 @@ interface Detail {
     expectedSalary: string | null;
     linkedinUrl: string | null;
     whatsappOptIn: boolean;
+    notes: { id: string; body: string; createdAt: string; author: { name: string } }[];
   };
   jobOpening: { id: string; jobId: string; title: string; client: string | null };
   assignedRecruiter: { id: string; name: string } | null;
@@ -41,7 +52,9 @@ interface Detail {
 
 export default async function ApplicationPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const app = await apiGet<Detail>(`/applications/${id}`);
+  const [app, user] = await Promise.all([apiGet<Detail>(`/applications/${id}`), getSession()]);
+  const isAdmin = user.role === "ADMIN";
+  const people = isAdmin ? await apiGet<{ id: string; name: string }[]>("/recruiters") : [];
   const c = app.candidate;
   const style = STATUS_STYLE[app.status];
 
@@ -57,13 +70,13 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
 
   return (
     <main className="mx-auto max-w-7xl px-4 py-6">
-      <Link
-        href="/admin/applications"
-        className="text-link text-mid"
-      >
-        <ArrowLeft size={14} strokeWidth={2.5} aria-hidden />
-        All applications
-      </Link>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <Link href="/admin/applications" className="text-link text-mid">
+          <ArrowLeft size={14} strokeWidth={2.5} aria-hidden />
+          All applications
+        </Link>
+        <StepNav previousId={app.previousId} nextId={app.nextId} />
+      </div>
 
       <header className="mt-3 flex flex-wrap items-start justify-between gap-3">
         <div className="flex items-start gap-3">
@@ -101,7 +114,19 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
             >
               Open pipeline board
             </Link>
+            {isAdmin ? (
+              <AssignControl applicationId={app.id} current={app.assignedRecruiter?.id ?? null} people={people} />
+            ) : null}
           </section>
+
+          {app.candidateNote && (
+            <section className="card p-4">
+              <h2 className="text-sm font-extrabold">Note from the candidate</h2>
+              <blockquote className="mt-2 whitespace-pre-line break-words border-l-4 border-orange pl-3 text-sm text-body">
+                {app.candidateNote}
+              </blockquote>
+            </section>
+          )}
 
           <section className="card p-4">
             <StatusControl applicationId={app.id} current={app.status} />
@@ -127,6 +152,27 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
               </a>
             )}
           </section>
+
+          {app.otherApplications.length > 0 && (
+            <section className="card p-4">
+              <h2 className="text-sm font-extrabold">Also applied to</h2>
+              <ul className="mt-2 divide-y-2 divide-line">
+                {app.otherApplications.map((other) => (
+                  <li key={other.id}>
+                    <Link href={`/admin/applications/${other.id}`} className="flex min-h-[48px] items-center gap-3 py-1.5 hover:bg-sand">
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-sm font-semibold">{other.jobOpening.title}</span>
+                        <span className="block font-mono text-xs text-mid">{other.jobOpening.jobId}</span>
+                      </span>
+                      <span className={`chip shrink-0 ${STATUS_STYLE[other.status].chip}`}>{STATUS_STYLE[other.status].label}</span>
+                    </Link>
+                  </li>
+                ))}
+              </ul>
+            </section>
+          )}
+
+          <Notes applicationId={app.id} initial={app.candidate.notes} />
 
           <section className="card p-4">
             <h2 className="text-sm font-extrabold">History</h2>
@@ -162,6 +208,14 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
               </ol>
             )}
           </section>
+
+          {isAdmin && (
+            <DeleteCandidate
+              candidateId={app.candidate.id}
+              name={c.name}
+              applicationCount={app.otherApplications.length + 1}
+            />
+          )}
         </div>
 
 

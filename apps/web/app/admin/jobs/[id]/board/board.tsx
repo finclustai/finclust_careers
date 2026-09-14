@@ -15,8 +15,8 @@ import {
 } from "@dnd-kit/core";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
-import { AlertCircle, GripVertical, Phone } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { AlertCircle, GripVertical, Phone, Search, Undo2, X } from "lucide-react";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 import {
   APPLICATION_STATUSES,
@@ -41,20 +41,33 @@ export interface Card {
     totalExperience: string | number | null;
   };
   assignedRecruiter: { id: string; name: string } | null;
+  jobOpening: { id: string; jobId: string; title: string };
 }
 
+/**
+ * One job's board, or with `combined` every job's on one board (ADR-0010). The
+ * combined board labels each card with its job and can filter to one.
+ */
 export function Board({
   initialCards,
   columnPageSize,
-  jobTitle,
+  combined = false,
 }: {
   initialCards: Card[];
   columnPageSize: number;
-  jobTitle: string;
+  combined?: boolean;
 }) {
   const [cards, setCards] = useState(initialCards);
   const [dragging, setDragging] = useState<Card | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [search, setSearch] = useState("");
+  const [jobFilter, setJobFilter] = useState("");
+  const [undo, setUndo] = useState<{ card: Card; from: ApplicationStatus; to: ApplicationStatus } | null>(null);
+
+  const jobs = useMemo(
+    () => [...new Map(initialCards.map((c) => [c.jobOpening.id, c.jobOpening])).values()],
+    [initialCards],
+  );
 
   const sensors = useSensors(
     // A small distance threshold keeps a click on the card from starting a drag.
@@ -67,15 +80,38 @@ export function Board({
     const grouped = new Map<ApplicationStatus, Card[]>(
       APPLICATION_STATUSES.map((status) => [status, []]),
     );
-    for (const card of cards) grouped.get(card.status)?.push(card);
+    const needle = search.trim().toLowerCase();
+    const digits = needle.replace(/\D/g, "");
+    for (const card of cards) {
+      if (jobFilter && card.jobOpening.id !== jobFilter) continue;
+      if (
+        needle &&
+        !card.candidate.name.toLowerCase().includes(needle) &&
+        !card.applicationReference.toLowerCase().includes(needle) &&
+        !(digits.length >= 3 && card.candidate.phone.includes(digits))
+      ) {
+        continue;
+      }
+      grouped.get(card.status)?.push(card);
+    }
     return grouped;
-  }, [cards]);
+  }, [cards, search, jobFilter]);
 
-  async function move(card: Card, to: ApplicationStatus) {
+  const shown = [...columns.values()].reduce((sum, list) => sum + list.length, 0);
+
+  // A mis-drop on a phone is easy; the way back is one tap for a few seconds.
+  useEffect(() => {
+    if (!undo) return;
+    const timer = setTimeout(() => setUndo(null), 6000);
+    return () => clearTimeout(timer);
+  }, [undo]);
+
+  async function move(card: Card, to: ApplicationStatus, offerUndo = true) {
     const from = card.status;
     if (from === to) return;
 
     setError(null);
+    setUndo(null);
     // Applied optimistically; rolled back visibly if the API refuses.
     setCards((all) => all.map((c) => (c.id === card.id ? { ...c, status: to } : c)));
 
@@ -89,6 +125,7 @@ export function Board({
         const body = await response.json().catch(() => ({}));
         throw new Error(body.message ?? "That move could not be saved.");
       }
+      if (offerUndo) setUndo({ card: { ...card, status: to }, from, to });
     } catch (caught) {
       setCards((all) => all.map((c) => (c.id === card.id ? { ...c, status: from } : c)));
       setError(caught instanceof Error ? caught.message : "That move could not be saved.");
@@ -109,6 +146,64 @@ export function Board({
 
   return (
     <>
+      <div className="mb-3 flex flex-wrap gap-2">
+        <label className="relative min-w-0 flex-1 basis-60">
+          <span className="sr-only">Search this board</span>
+          <Search size={16} strokeWidth={2.5} aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-mid" />
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Name, phone or reference"
+            className="field !min-h-[44px] !pl-9"
+          />
+        </label>
+        {combined && jobs.length > 1 && (
+          <label className="min-w-0 flex-1 basis-60 sm:max-w-xs">
+            <span className="sr-only">Show one job</span>
+            <select value={jobFilter} onChange={(event) => setJobFilter(event.target.value)} className="field !min-h-[44px]">
+              <option value="">All jobs</option>
+              {jobs.map((job) => (
+                <option key={job.id} value={job.id}>
+                  {job.title} ({job.jobId})
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+      {(search || jobFilter) && (
+        <p className="mb-2 text-xs text-mid" aria-live="polite">
+          Showing <span className="tnum font-bold">{shown}</span> of <span className="tnum">{cards.length}</span>
+        </p>
+      )}
+
+      {undo && (
+        <div
+          role="status"
+          className="fixed inset-x-3 bottom-3 z-30 mx-auto flex max-w-md items-center gap-3 rounded-[14px] border-2 border-ink bg-ink p-2 pl-4 text-sm text-paper shadow-[0_4px_0_var(--color-orange)]"
+        >
+          <span className="min-w-0 flex-1 truncate">
+            {undo.card.candidate.name} moved to <strong>{STATUS_STYLE[undo.to].label}</strong>
+          </span>
+          <button
+            type="button"
+            onClick={() => {
+              const { card, from } = undo;
+              setUndo(null);
+              void move(card, from, false);
+            }}
+            className="inline-flex min-h-[44px] items-center gap-1.5 rounded-[10px] border-2 border-paper bg-orange px-3 font-bold text-ink"
+          >
+            <Undo2 size={15} strokeWidth={2.5} aria-hidden />
+            Undo
+          </button>
+          <button type="button" onClick={() => setUndo(null)} aria-label="Dismiss" className="icon-button text-paper">
+            <X size={16} strokeWidth={2.5} aria-hidden />
+          </button>
+        </div>
+      )}
+
       {error && (
         <p role="alert" className="error mb-3">
           <AlertCircle size={15} strokeWidth={2} aria-hidden className="mt-px shrink-0" />
@@ -136,14 +231,14 @@ export function Board({
               cards={columns.get(status) ?? []}
               pageSize={columnPageSize}
               draggingFrom={dragging?.status ?? null}
-              jobTitle={jobTitle}
+              combined={combined}
               onMove={move}
             />
           ))}
         </div>
 
         <DragOverlay dropAnimation={null}>
-          {dragging && <CardFace card={dragging} jobTitle={jobTitle} lifted />}
+          {dragging && <CardFace card={dragging} combined={combined} lifted />}
         </DragOverlay>
       </DndContext>
     </>
@@ -155,14 +250,14 @@ function Column({
   cards,
   pageSize,
   draggingFrom,
-  jobTitle,
+  combined,
   onMove,
 }: {
   status: ApplicationStatus;
   cards: Card[];
   pageSize: number;
   draggingFrom: ApplicationStatus | null;
-  jobTitle: string;
+  combined: boolean;
   onMove: (card: Card, to: ApplicationStatus) => void;
 }) {
   const [shown, setShown] = useState(pageSize);
@@ -196,7 +291,7 @@ function Column({
 
       <div className="flex flex-col gap-2.5">
         {cards.slice(0, shown).map((card) => (
-          <DraggableCard key={card.id} card={card} jobTitle={jobTitle} onMove={onMove} />
+          <DraggableCard key={card.id} card={card} combined={combined} onMove={onMove} />
         ))}
 
         {cards.length === 0 && (
@@ -221,11 +316,11 @@ function Column({
 
 function DraggableCard({
   card,
-  jobTitle,
+  combined,
   onMove,
 }: {
   card: Card;
-  jobTitle: string;
+  combined: boolean;
   onMove: (card: Card, to: ApplicationStatus) => void;
 }) {
   const { attributes, listeners, setNodeRef, isDragging } = useDraggable({ id: card.id });
@@ -234,7 +329,7 @@ function DraggableCard({
     <div ref={setNodeRef} className={isDragging ? "opacity-30" : ""}>
       <CardFace
         card={card}
-        jobTitle={jobTitle}
+        combined={combined}
         handleProps={{ ...attributes, ...listeners }}
         onMove={onMove}
       />
@@ -244,13 +339,13 @@ function DraggableCard({
 
 function CardFace({
   card,
-  jobTitle,
+  combined,
   handleProps,
   onMove,
   lifted,
 }: {
   card: Card;
-  jobTitle: string;
+  combined: boolean;
   handleProps?: Record<string, unknown>;
   onMove?: (card: Card, to: ApplicationStatus) => void;
   lifted?: boolean;
@@ -306,6 +401,13 @@ function CardFace({
           candidateName={card.candidate.name}
         />
       </div>
+
+      {combined && (
+        <p className="mt-2 truncate font-mono text-[11px] font-bold" title={card.jobOpening.title}>
+          {card.jobOpening.jobId}
+          <span className="font-sans font-normal text-mid"> · {card.jobOpening.title}</span>
+        </p>
+      )}
 
       <p className="mt-2 text-xs text-body">
         {[

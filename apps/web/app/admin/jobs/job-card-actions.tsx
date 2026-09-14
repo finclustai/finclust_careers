@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { Check, Copy, LayoutGrid, Loader2, Pause, Pencil, Play } from "lucide-react";
+import { Check, CopyPlus, Copy, LayoutGrid, Loader2, Pause, Pencil, Play, Trash2 } from "lucide-react";
+import { errorText, send } from "@/lib/client-api";
 
 type JobStatus = "DRAFT" | "ACTIVE" | "ON_HOLD" | "CLOSED" | "CANCELLED";
 
@@ -14,11 +15,15 @@ type JobStatus = "DRAFT" | "ACTIVE" | "ON_HOLD" | "CLOSED" | "CANCELLED";
 export function JobCardActions({
   id,
   jobId,
+  title,
   status,
+  isAdmin,
 }: {
   id: string;
   jobId: string;
+  title: string;
   status: JobStatus;
+  isAdmin: boolean;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState(false);
@@ -50,6 +55,19 @@ export function JobCardActions({
     }
   }
 
+  async function trash() {
+    if (!confirm(`Move "${title}" to Trash? It stops collecting and disappears from every list. You can restore it from Trash.`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await send("DELETE", `/jobs/${id}`);
+      router.refresh();
+    } catch (caught) {
+      setError(errorText(caught));
+      setBusy(false);
+    }
+  }
+
   async function copyLink() {
     // Built from the current origin so the copied link is always the host the
     // recruiter is actually on, whether that is localhost or the real domain.
@@ -70,6 +88,7 @@ export function JobCardActions({
         Pipeline
       </Link>
 
+      {isAdmin && (
       <button type="button" onClick={toggle} disabled={busy} className="action">
         {busy ? (
           <Loader2 size={14} strokeWidth={2.5} aria-hidden className="animate-spin" />
@@ -80,11 +99,14 @@ export function JobCardActions({
         )}
         {accepting ? "Pause" : "Start"}
       </button>
+      )}
 
-      <Link href={`/admin/jobs/${id}/edit`} className="action">
-        <Pencil size={14} strokeWidth={2.5} aria-hidden />
-        Edit
-      </Link>
+      {isAdmin && (
+        <Link href={`/admin/jobs/${id}/edit`} className="action">
+          <Pencil size={14} strokeWidth={2.5} aria-hidden />
+          Edit
+        </Link>
+      )}
 
       <button
         type="button"
@@ -102,6 +124,19 @@ export function JobCardActions({
         )}
         {copied ? "Copied" : "Copy link"}
       </button>
+
+      {isAdmin && (
+        <>
+          <Link href={`/admin/jobs/new?from=${id}`} className="action">
+            <CopyPlus size={14} strokeWidth={2.5} aria-hidden />
+            Clone
+          </Link>
+          <button type="button" onClick={trash} disabled={busy} className="action" aria-label={`Delete ${title}`}>
+            <Trash2 size={14} strokeWidth={2.5} aria-hidden />
+            Delete
+          </button>
+        </>
+      )}
 
       {error && (
         <p role="alert" className="error w-full">

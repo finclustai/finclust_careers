@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { AlertCircle, Loader2, Pause, Pencil, Play, XCircle } from "lucide-react";
+import { AlertCircle, CopyPlus, Loader2, Pause, Pencil, Play, Trash2, XCircle } from "lucide-react";
+import { errorText, send } from "@/lib/client-api";
 
 type JobStatus = "DRAFT" | "ACTIVE" | "ON_HOLD" | "CLOSED" | "CANCELLED";
 
@@ -12,7 +13,7 @@ type JobStatus = "DRAFT" | "ACTIVE" | "ON_HOLD" | "CLOSED" | "CANCELLED";
  * other status returns "no longer accepting applications" to a candidate opening
  * the link, so toggling off takes effect immediately on links already shared.
  */
-export function JobControls({ jobId, status }: { jobId: string; status: JobStatus }) {
+export function JobControls({ jobId, title, status }: { jobId: string; title: string; status: JobStatus }) {
   const router = useRouter();
   const [busy, setBusy] = useState<JobStatus | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -41,6 +42,18 @@ export function JobControls({ jobId, status }: { jobId: string; status: JobStatu
       setError(caught instanceof Error ? caught.message : "Could not change the status.");
     } finally {
       setBusy(null);
+    }
+  }
+
+  async function trash() {
+    if (!confirm(`Move "${title}" to Trash? It stops collecting and disappears from every list. You can restore it from Trash.`)) return;
+    setError(null);
+    try {
+      await send("DELETE", `/jobs/${jobId}`);
+      router.push("/admin/jobs");
+      router.refresh();
+    } catch (caught) {
+      setError(errorText(caught));
     }
   }
 
@@ -107,6 +120,16 @@ export function JobControls({ jobId, status }: { jobId: string; status: JobStatu
               Close
             </button>
           )}
+
+          <Link href={`/admin/jobs/new?from=${jobId}`} className="btn btn-secondary">
+            <CopyPlus size={16} strokeWidth={2.5} aria-hidden />
+            Clone
+          </Link>
+
+          <button type="button" onClick={trash} disabled={busy !== null} className="btn btn-secondary">
+            <Trash2 size={16} strokeWidth={2.5} aria-hidden />
+            Delete
+          </button>
         </div>
       </div>
 

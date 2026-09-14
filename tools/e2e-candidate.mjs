@@ -1,7 +1,8 @@
 /**
  * Candidate journey in a real browser at phone width: open roles, apply with a
  * Word CV, note box, success page, status lookup, and the admin view of a Word
- * CV. Creates one labelled test application; tools/e2e-cleanup.mjs removes it.
+ * CV. Runs against a temporary job with the note box on, unless JOB names a
+ * real one. tools/e2e-admin.mjs continues from here and erases what this made.
  *
  *   python tools/make-test-docx.py && node tools/e2e-candidate.mjs
  */
@@ -10,10 +11,32 @@ import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 
 const BASE = process.env.BASE ?? "http://127.0.0.1:3000";
 const SHOTS = "tools/shots";
-const JOB = process.env.JOB ?? "EBS-FIN-001";
 const env = readFileSync(".env", "utf8");
 const ADMIN_EMAIL = /^SEED_ADMIN_EMAIL="?(.*?)"?$/m.exec(env)?.[1];
 const ADMIN_PASSWORD = /^SEED_ADMIN_PASSWORD="?(.*?)"?$/m.exec(env)?.[1];
+
+// The database is shared with the live site, so tests never touch real jobs.
+async function createTestJob() {
+  const login = await fetch(`${BASE}/api/auth/login`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ email: ADMIN_EMAIL, password: ADMIN_PASSWORD }),
+  });
+  const cookie = login.headers.get("set-cookie").split(";")[0];
+  const call = async (method, path, body) =>
+    (await fetch(`${BASE}/api${path}`, { method, headers: { cookie, "Content-Type": "application/json" }, body: JSON.stringify(body) })).json();
+  const [profile] = await (await fetch(`${BASE}/api/job-profiles`, { headers: { cookie } })).json();
+  const job = await call("POST", "/jobs", {
+    jobId: `E2E-${String(Date.now()).slice(-6)}`,
+    title: "E2E test role",
+    profileId: profile.id,
+    candidateNoteEnabled: true,
+  });
+  await call("PUT", `/jobs/${job.id}/status`, { status: "ACTIVE" });
+  return job;
+}
+const testJob = process.env.JOB ? null : await createTestJob();
+const JOB = process.env.JOB ?? testJob.jobId;
 
 // A phone number no real candidate has, so the run always creates a fresh application.
 const PHONE = `98${String(Date.now()).slice(-8)}`;
@@ -105,7 +128,7 @@ check("Word CV shows download panel, not a broken preview", await admin.getByTex
 check("no inline iframe for the Word file", (await admin.locator("iframe").count()) === 0);
 await admin.screenshot({ path: `${SHOTS}/e2e-admin-word.png` });
 
-writeFileSync(`${SHOTS}/e2e-created.json`, JSON.stringify({ phone: `+91${PHONE}`, reference }));
+writeFileSync(`${SHOTS}/e2e-created.json`, JSON.stringify({ phone: `+91${PHONE}`, reference, jobId: JOB, testJobId: testJob?.id ?? null }));
 console.log(`\n${pass.length} passed, ${fail.length} failed`);
 await browser.close();
 process.exit(fail.length ? 1 : 0);

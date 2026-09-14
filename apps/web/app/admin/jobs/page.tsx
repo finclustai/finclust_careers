@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { apiGet } from "@/lib/server-api";
+import { apiGet, getSession } from "@/lib/server-api";
 import { JobCardActions } from "./job-card-actions";
 
 export const dynamic = "force-dynamic";
@@ -29,15 +29,18 @@ interface JobList {
 }
 
 export default async function JobsPage() {
-  const data = await apiGet<JobList>("/jobs?pageSize=50");
+  const [data, user] = await Promise.all([apiGet<JobList>("/jobs?pageSize=50"), getSession()]);
+  const isAdmin = user.role === "ADMIN";
 
   return (
     <main className="mx-auto max-w-3xl px-4 py-8">
       <header className="mb-5 flex items-end justify-between gap-3">
         <h1 className="text-2xl font-extrabold">Job openings</h1>
-        <Link href="/admin/jobs/new" className="btn btn-primary shrink-0">
-          New job
-        </Link>
+        {isAdmin && (
+          <Link href="/admin/jobs/new" className="btn btn-primary shrink-0">
+            New job
+          </Link>
+        )}
       </header>
 
       {data.items.length === 0 ? (
@@ -85,7 +88,7 @@ export default async function JobsPage() {
                 </span>
               </div>
 
-              <JobCardActions id={job.id} jobId={job.jobId} status={job.status} />
+              <JobCardActions id={job.id} jobId={job.jobId} title={job.title} status={job.status} isAdmin={isAdmin} />
             </li>
           ))}
         </ul>

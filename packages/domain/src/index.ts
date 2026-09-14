@@ -4,4 +4,5 @@ export { APPLICATION_SOURCES, normaliseSource, type ApplicationSource } from "./
 export { normalisePhone } from "./phone.js";
 export { CV_ACCEPT, CV_MIME, cvTypeFromName, cvTypeFromSignature, isPreviewable, type CvType } from "./cv-file.js";
 export { parseDescription, type DescriptionBlock } from "./description.js";
+export { dailyCounts } from "./daily-counts.js";
 export { candidateFacingStatus, type CandidateStatusView, type CandidateStage } from "./candidate-status.js";

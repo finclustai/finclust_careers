@@ -1,6 +1,7 @@
 import { Module } from "@nestjs/common";
 import { JwtModule } from "@nestjs/jwt";
 import { AuthController } from "./auth.controller.js";
+import { UsersController } from "./users.controller.js";
 import { AuthService } from "./auth.service.js";
 import { PrismaUserRepository } from "./prisma-user-repository.js";
 import { UserRepository } from "./user-repository.js";
@@ -14,7 +15,7 @@ import { env } from "../env.js";
       signOptions: { expiresIn: `${env.sessionTtlHours}h` },
     }),
   ],
-  controllers: [AuthController],
+  controllers: [AuthController, UsersController],
   providers: [
     AuthService,
     PrismaService,

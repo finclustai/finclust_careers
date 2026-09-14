@@ -1,10 +1,10 @@
 import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { canTransition, isPreviewable, type ApplicationStatus } from "@finclust/domain";
+import { canTransition, dailyCounts, isPreviewable, type ApplicationStatus } from "@finclust/domain";
 import { Prisma } from "@finclust/db";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { StorageService } from "../storage/storage.service.js";
 import type { SessionUser } from "../auth/index.js";
-import type { ChangeStatusDto, ListApplicationsQueryDto } from "./dto.js";
+import type { AssignDto, ChangeStatusDto, ListApplicationsQueryDto, NoteDto } from "./dto.js";
 
 const CARD_FIELDS = {
   id: true,
@@ -37,26 +37,38 @@ export class ApplicationsService {
    * every query in this service starts from this clause.
    */
   private scope(user: SessionUser): Prisma.ApplicationWhereInput {
-    const base: Prisma.ApplicationWhereInput = { deletedAt: null };
+    // Anything in Trash -- the job or the candidate -- is hidden everywhere.
+    const base: Prisma.ApplicationWhereInput = {
+      deletedAt: null,
+      candidate: { deletedAt: null },
+      jobOpening: { deletedAt: null },
+    };
     if (user.role === "ADMIN") return base;
     return { ...base, assignedRecruiterId: user.id };
   }
 
-  /** Board data: one Job Opening, grouped into its stage columns. */
-  async board(jobOpeningId: string, user: SessionUser) {
-    const job = await this.prisma.client.jobOpening.findUnique({
-      where: { id: jobOpeningId },
-      select: { id: true, jobId: true, title: true, client: true, status: true },
-    });
-    if (!job) throw new NotFoundException("That job opening does not exist.");
+  /**
+   * Board data, grouped client-side into stage columns. With a job id it is that
+   * job's board; without, it is the combined board across every job (ADR-0010).
+   */
+  async board(jobOpeningId: string | undefined, user: SessionUser) {
+    const job = jobOpeningId
+      ? await this.prisma.client.jobOpening.findFirst({
+          where: { id: jobOpeningId, deletedAt: null },
+          select: { id: true, jobId: true, title: true, client: true, status: true },
+        })
+      : null;
+    if (jobOpeningId && !job) throw new NotFoundException("That job opening does not exist.");
 
-    const where = { ...this.scope(user), jobOpeningId };
+    const where = { ...this.scope(user), ...(jobOpeningId ? { jobOpeningId } : {}) };
 
     const [cards, counts] = await Promise.all([
       this.prisma.client.application.findMany({
         where,
         select: CARD_FIELDS,
         orderBy: { appliedAt: "desc" },
+        // ponytail: newest 450 cards only. Enough for a board a person can
+        // scan; the filtered list page is the tool past that.
         take: COLUMN_PAGE_SIZE * 9,
       }),
       this.prisma.client.application.groupBy({
@@ -94,7 +106,7 @@ export class ApplicationsService {
             },
           }
         : {}),
-      ...(query.profileId ? { jobOpening: { profileId: query.profileId } } : {}),
+      ...(query.profileId ? { jobOpening: { deletedAt: null, profileId: query.profileId } } : {}),
       ...(search
         ? {
             OR: [
@@ -126,10 +138,18 @@ export class ApplicationsService {
   }
 
   async findOne(id: string, user: SessionUser) {
+    const scope = this.scope(user);
     const application = await this.prisma.client.application.findFirst({
-      where: { ...this.scope(user), id },
+      where: { ...scope, id },
       include: {
-        candidate: true,
+        candidate: {
+          include: {
+            notes: {
+              orderBy: { createdAt: "desc" },
+              select: { id: true, body: true, createdAt: true, author: { select: { name: true } } },
+            },
+          },
+        },
         jobOpening: { select: { id: true, jobId: true, title: true, client: true } },
         assignedRecruiter: { select: { id: true, name: true } },
         resume: { select: { id: true, originalFileName: true, fileSize: true, mimeType: true, uploadedAt: true } },
@@ -142,7 +162,147 @@ export class ApplicationsService {
     // Deliberately a 404 and not a 403: telling a recruiter that an application
     // exists but is not theirs leaks the pipeline of every other recruiter.
     if (!application) throw new NotFoundException("That application does not exist.");
-    return application;
+
+    // Prev/Next walk the same job, newest first, like its board.
+    const sameJob = { ...scope, jobOpeningId: application.jobOpeningId };
+    const [newer, older, otherApplications] = await Promise.all([
+      this.prisma.client.application.findFirst({
+        where: { ...sameJob, appliedAt: { gt: application.appliedAt } },
+        orderBy: { appliedAt: "asc" },
+        select: { id: true },
+      }),
+      this.prisma.client.application.findFirst({
+        where: { ...sameJob, appliedAt: { lt: application.appliedAt } },
+        orderBy: { appliedAt: "desc" },
+        select: { id: true },
+      }),
+      this.prisma.client.application.findMany({
+        where: { ...scope, candidateId: application.candidateId, id: { not: id } },
+        orderBy: { appliedAt: "desc" },
+        select: {
+          id: true, status: true, appliedAt: true,
+          jobOpening: { select: { jobId: true, title: true } },
+        },
+      }),
+    ]);
+
+    return { ...application, previousId: newer?.id ?? null, nextId: older?.id ?? null, otherApplications };
+  }
+
+  /** Notes belong to the candidate, so they follow them to every vacancy. */
+  async addNote(applicationId: string, dto: NoteDto, user: SessionUser) {
+    const application = await this.prisma.client.application.findFirst({
+      where: { ...this.scope(user), id: applicationId },
+      select: { candidateId: true },
+    });
+    if (!application) throw new NotFoundException("That application does not exist.");
+    return this.prisma.client.candidateNote.create({
+      data: { candidateId: application.candidateId, authorId: user.id, body: dto.body.trim() },
+      select: { id: true, body: true, createdAt: true, author: { select: { name: true } } },
+    });
+  }
+
+  async assign(applicationId: string, dto: AssignDto, user: SessionUser) {
+    const application = await this.prisma.client.application.findFirst({
+      where: { ...this.scope(user), id: applicationId },
+      select: { id: true },
+    });
+    if (!application) throw new NotFoundException("That application does not exist.");
+
+    if (dto.recruiterId) {
+      const recruiter = await this.prisma.client.user.findFirst({
+        where: { id: dto.recruiterId, isActive: true },
+        select: { id: true },
+      });
+      if (!recruiter) throw new BadRequestException("That person cannot be assigned.");
+    }
+    return this.prisma.client.application.update({
+      where: { id: applicationId },
+      data: { assignedRecruiterId: dto.recruiterId ?? null },
+      select: CARD_FIELDS,
+    });
+  }
+
+  /**
+   * Everything the dashboard shows, scoped like every other read: a recruiter's
+   * numbers cover only what is assigned to them.
+   */
+  async dashboard(user: SessionUser) {
+    const scope = this.scope(user);
+    const since = new Date(Date.now() - 14 * 86_400_000);
+
+    const [me, total, byStatus, bySource, byJob, recentDates, recent, activeJobs] = await Promise.all([
+      this.prisma.client.user.findUnique({ where: { id: user.id }, select: { lastSeenApplicationsAt: true } }),
+      this.prisma.client.application.count({ where: scope }),
+      this.prisma.client.application.groupBy({ by: ["status"], where: scope, _count: { _all: true } }),
+      this.prisma.client.application.groupBy({ by: ["source"], where: scope, _count: { _all: true } }),
+      this.prisma.client.application.groupBy({ by: ["jobOpeningId", "status"], where: scope, _count: { _all: true } }),
+      // ponytail: bucketed in JS. Fine for thousands of applications a
+      // fortnight; move to a date_trunc GROUP BY if it ever is not.
+      this.prisma.client.application.findMany({
+        where: { ...scope, appliedAt: { gte: since } },
+        select: { appliedAt: true },
+      }),
+      this.prisma.client.application.findMany({
+        where: scope,
+        select: CARD_FIELDS,
+        orderBy: { appliedAt: "desc" },
+        take: 8,
+      }),
+      this.prisma.client.jobOpening.findMany({
+        where: { status: "ACTIVE", deletedAt: null },
+        select: {
+          id: true, jobId: true, title: true, openedAt: true, closesAt: true,
+          applicationLinks: { select: { clickCount: true } },
+        },
+        orderBy: { openedAt: "desc" },
+      }),
+    ]);
+
+    const lastSeenAt = me?.lastSeenApplicationsAt ?? null;
+    const newSinceLastVisit = await this.prisma.client.application.count({
+      where: { ...scope, ...(lastSeenAt ? { appliedAt: { gt: lastSeenAt } } : {}) },
+    });
+
+    const daily = dailyCounts(recentDates.map((r) => r.appliedAt), 14);
+    const funnel = Object.fromEntries(byStatus.map((g) => [g.status, g._count._all]));
+
+    return {
+      totals: {
+        applications: total,
+        today: daily[daily.length - 1].count,
+        last7Days: daily.slice(-7).reduce((sum, d) => sum + d.count, 0),
+        awaitingReview: funnel.NEW ?? 0,
+        newSinceLastVisit,
+        activeJobs: activeJobs.length,
+      },
+      lastSeenAt,
+      daily,
+      funnel,
+      sources: Object.fromEntries(bySource.map((g) => [g.source, g._count._all])),
+      jobs: activeJobs.map((job) => {
+        const rows = byJob.filter((g) => g.jobOpeningId === job.id);
+        return {
+          id: job.id,
+          jobId: job.jobId,
+          title: job.title,
+          openedAt: job.openedAt,
+          closesAt: job.closesAt,
+          clicks: job.applicationLinks.reduce((sum, l) => sum + l.clickCount, 0),
+          applications: rows.reduce((sum, g) => sum + g._count._all, 0),
+          awaitingReview: rows.find((g) => g.status === "NEW")?._count._all ?? 0,
+        };
+      }),
+      recent,
+    };
+  }
+
+  async markSeen(user: SessionUser) {
+    await this.prisma.client.user.update({
+      where: { id: user.id },
+      data: { lastSeenApplicationsAt: new Date() },
+    });
+    return { ok: true };
   }
 
   /**

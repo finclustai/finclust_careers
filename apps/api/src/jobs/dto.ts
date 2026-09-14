@@ -1,6 +1,6 @@
 import { Type } from "class-transformer";
 import {
-  IsArray, IsEnum, IsInt, IsISO8601, IsOptional, IsString,
+  IsArray, IsBoolean, IsEnum, IsInt, IsISO8601, IsOptional, IsString,
   Matches, Max, MaxLength, Min, MinLength,
 } from "class-validator";
 
@@ -38,7 +38,10 @@ export class CreateJobOpeningDto {
   @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(60) maxExperience?: number;
   @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(999) openings?: number;
 
-  @IsOptional() @IsISO8601() closesAt?: string;
+  // null clears it. After this moment the job stops accepting applications.
+  @IsOptional() @IsISO8601() closesAt?: string | null;
+
+  @IsOptional() @IsBoolean() candidateNoteEnabled?: boolean;
 }
 
 export class UpdateJobOpeningDto extends CreateJobOpeningDto {
