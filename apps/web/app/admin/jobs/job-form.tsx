@@ -77,13 +77,15 @@ export function JobForm({
     setBusy(true);
 
     const data = new FormData(event.currentTarget);
+    // A field cleared while editing is sent as null so the saved value is
+    // removed; left out, the API would keep the old one.
     const text = (key: string) => {
       const value = String(data.get(key) ?? "").trim();
-      return value === "" ? undefined : value;
+      return value === "" ? (editing ? null : undefined) : value;
     };
     const number = (key: string) => {
       const value = text(key);
-      return value === undefined ? undefined : Number(value);
+      return value == null ? value : Number(value);
     };
 
     try {

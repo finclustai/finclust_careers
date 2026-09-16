@@ -22,22 +22,23 @@ export class CreateJobOpeningDto {
   @IsString()
   profileId!: string;
 
+  // On optional details, null clears the saved value; absent leaves it alone.
   @IsOptional() @IsString() @MaxLength(20000)
-  description?: string;
+  description?: string | null;
 
   @IsOptional() @IsArray() @IsString({ each: true }) @MaxLength(60, { each: true })
   requiredSkills?: string[];
 
-  @IsOptional() @IsString() @MaxLength(200) client?: string;
-  @IsOptional() @IsString() @MaxLength(200) location?: string;
+  @IsOptional() @IsString() @MaxLength(200) client?: string | null;
+  @IsOptional() @IsString() @MaxLength(200) location?: string | null;
 
-  @IsOptional() @IsEnum(["ONSITE", "HYBRID", "REMOTE"]) workMode?: "ONSITE" | "HYBRID" | "REMOTE";
+  @IsOptional() @IsEnum(["ONSITE", "HYBRID", "REMOTE"]) workMode?: "ONSITE" | "HYBRID" | "REMOTE" | null;
   @IsOptional() @IsEnum(["FULL_TIME", "CONTRACT", "INTERNSHIP"])
-  employmentType?: "FULL_TIME" | "CONTRACT" | "INTERNSHIP";
+  employmentType?: "FULL_TIME" | "CONTRACT" | "INTERNSHIP" | null;
 
-  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(60) minExperience?: number;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(60) maxExperience?: number;
-  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(999) openings?: number;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(60) minExperience?: number | null;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(0) @Max(60) maxExperience?: number | null;
+  @IsOptional() @Type(() => Number) @IsInt() @Min(1) @Max(999) openings?: number | null;
 
   // null clears it. After this moment the job stops accepting applications.
   @IsOptional() @IsISO8601() closesAt?: string | null;

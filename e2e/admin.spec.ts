@@ -219,6 +219,24 @@ test("share post: edit one channel's message, facts follow job edits, reset", as
   await page.getByRole("tab", { name: /^LinkedIn/ }).click();
   await expect(page.getByLabel(/post preview$/)).toContainText(`Now hiring Post Role ${t} in Kochi`);
 
+  // Clearing fields in Edit job really empties them (it used to keep the old text).
+  await page.request.put(`/api/jobs/${job.id}`, { data: { description: "Old description to remove" } });
+  await page.goto(`/admin/jobs/${job.id}/edit`);
+  await expect(page.locator("textarea[name=description]")).toHaveValue("Old description to remove");
+  await page.fill("textarea[name=description]", "");
+  await page.fill("input[name=location]", "");
+  await page.fill("input[name=maxExperience]", "");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page).toHaveURL(new RegExp(`/admin/jobs/${job.id}$`));
+  const saved = await (await page.request.get(`/api/jobs/${job.id}`)).json();
+  expect(saved.description).toBeNull();
+  expect(saved.location).toBeNull();
+  expect(saved.maxExperience).toBeNull();
+  expect(saved.minExperience).toBe(2);
+  await expect(page.getByRole("heading", { name: "Description" })).toHaveCount(0);
+
+  await page.getByRole("tab", { name: /^LinkedIn/ }).click();
+  await expect(page.getByLabel(/post preview$/)).not.toContainText("Location");
   await page.getByRole("button", { name: "Edit", exact: true }).click();
   await page.getByRole("button", { name: "Use default" }).click();
   await expect(page.getByText("LinkedIn uses the default wording.")).toBeVisible();

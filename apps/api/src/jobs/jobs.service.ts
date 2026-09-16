@@ -113,7 +113,8 @@ export class JobsService {
         employmentType: dto.employmentType,
         minExperience: dto.minExperience,
         maxExperience: dto.maxExperience,
-        openings: dto.openings,
+        // Openings cannot be empty; clearing it means the usual single opening.
+        openings: dto.openings === null ? 1 : dto.openings,
         closesAt: dto.closesAt === undefined ? undefined : dto.closesAt ? new Date(dto.closesAt) : null,
         candidateNoteEnabled: dto.candidateNoteEnabled,
       },
@@ -164,9 +165,9 @@ export class JobsService {
     });
   }
 
-  private assertExperienceRange(dto: { minExperience?: number; maxExperience?: number }) {
+  private assertExperienceRange(dto: { minExperience?: number | null; maxExperience?: number | null }) {
     const { minExperience: min, maxExperience: max } = dto;
-    if (min !== undefined && max !== undefined && min > max) {
+    if (min != null && max != null && min > max) {
       throw new BadRequestException("Minimum experience cannot exceed maximum experience.");
     }
   }
