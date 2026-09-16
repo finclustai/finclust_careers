@@ -76,10 +76,16 @@ _Avoid_: platform, channel, medium, referrer
 
 **Application Status**:
 Where one Application sits in the pipeline: New, Screening, Shortlisted,
-Sent to Client, Interview, Selected, Offer, Joined, Rejected or On Hold. It belongs to the
+Sent to Client, Interview, Selected, Offer, Joined, Rejected or Future. It belongs to the
 Application, not the Candidate — the same person can be Shortlisted for one
 vacancy and Rejected for another at the same time.
 _Avoid_: candidate status, stage, state
+
+**Future**:
+The Application Status for someone not right for this vacancy now but worth
+contacting for later ones. Stored as `ON_HOLD`; to the Candidate it still reads
+"Under review".
+_Avoid_: on hold, parked, talent pool
 
 **Status Change**:
 A recorded transition of one Application from one Application Status to another,

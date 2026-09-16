@@ -2,7 +2,7 @@ import { Body, Controller, Get, Param, ParseUUIDPipe, Post, Put, Query } from "@
 import { JobsService } from "./jobs.service.js";
 import { PublicLinksService } from "./public-links.service.js";
 import {
-  ChangeJobStatusDto, CreateJobOpeningDto, ListJobsQueryDto, UpdateJobOpeningDto,
+  ChangeJobStatusDto, CreateJobOpeningDto, ListJobsQueryDto, ShareMessageDto, UpdateJobOpeningDto,
 } from "./dto.js";
 import { CurrentUser, Roles, type SessionUser } from "../auth/index.js";
 
@@ -34,6 +34,12 @@ export class JobsController {
   @Roles("ADMIN")
   update(@Param("id", ParseUUIDPipe) id: string, @Body() dto: UpdateJobOpeningDto) {
     return this.jobs.update(id, dto);
+  }
+
+  @Put(":id/share-message")
+  @Roles("ADMIN")
+  setShareMessage(@Param("id", ParseUUIDPipe) id: string, @Body() dto: ShareMessageDto) {
+    return this.jobs.setShareMessage(id, dto.source, dto.message);
   }
 
   @Put(":id/status")

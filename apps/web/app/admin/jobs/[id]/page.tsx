@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft, LayoutGrid } from "lucide-react";
 import QRCode from "qrcode";
 import { apiGet, getSession } from "@/lib/server-api";
-import { ShareKit } from "./share-kit";
+import { ShareKit, type ShareLink } from "./share-kit";
 import { JobControls } from "./job-controls";
 
 export const dynamic = "force-dynamic";
@@ -25,11 +25,7 @@ interface JobDetail {
   closesAt: string | null;
   profile: { name: string };
   _count: { applications: number };
-  share: {
-    links: { source: string; url: string; clickCount: number }[];
-    template: string;
-    customTemplate: boolean;
-  };
+  share: { links: ShareLink[] };
 }
 
 export default async function JobPage({ params }: { params: Promise<{ id: string }> }) {
@@ -80,7 +76,7 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
       )}
 
       {job.status === "ACTIVE" && (
-        <ShareKit jobUuid={job.id} job={job} share={job.share} canEdit={user.role === "ADMIN"} />
+        <ShareKit jobUuid={job.id} job={job} links={job.share.links} canEdit={user.role === "ADMIN"} />
       )}
 
       {job.status === "ACTIVE" && qr && (

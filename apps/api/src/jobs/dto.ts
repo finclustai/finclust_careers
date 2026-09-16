@@ -1,4 +1,5 @@
 import { Type } from "class-transformer";
+import { APPLICATION_SOURCES, type ApplicationSource } from "@finclust/domain";
 import {
   IsArray, IsBoolean, IsEnum, IsInt, IsISO8601, IsOptional, IsString,
   Matches, Max, MaxLength, Min, MinLength,
@@ -42,9 +43,6 @@ export class CreateJobOpeningDto {
   @IsOptional() @IsISO8601() closesAt?: string | null;
 
   @IsOptional() @IsBoolean() candidateNoteEnabled?: boolean;
-
-  // The job's own WhatsApp/Telegram post template; null goes back to the default.
-  @IsOptional() @IsString() @MaxLength(4000) shareMessage?: string | null;
 }
 
 export class UpdateJobOpeningDto extends CreateJobOpeningDto {
@@ -53,6 +51,12 @@ export class UpdateJobOpeningDto extends CreateJobOpeningDto {
   @IsOptional() @Matches(JOB_ID) declare jobId: string;
   @IsOptional() @IsString() @MinLength(3) @MaxLength(200) declare title: string;
   @IsOptional() @IsString() declare profileId: string;
+}
+
+export class ShareMessageDto {
+  @IsEnum(APPLICATION_SOURCES) source!: ApplicationSource;
+  // null goes back to that channel's default post.
+  @IsOptional() @IsString() @MaxLength(4000) message?: string | null;
 }
 
 export class ChangeJobStatusDto {

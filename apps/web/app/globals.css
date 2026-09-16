@@ -226,15 +226,6 @@
     position: relative;
   }
 
-  /* Filters collapse on a phone so the data is reachable without scrolling past
-     six controls, and are always open from tablet up where there is room. Done
-     in CSS rather than JS so there is no flash of the wrong state. */
-  @media (min-width: 640px) {
-    details.filters > div {
-      display: grid !important;
-    }
-  }
-
   /* summary markers off; the chevron is the affordance */
   summary::-webkit-details-marker {
     display: none;

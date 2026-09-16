@@ -1,3 +1,5 @@
+import type { ApplicationSource } from "./application-source.js";
+
 export interface PostableJob {
   title: string;
   client: string | null;
@@ -33,6 +35,14 @@ export const DEFAULT_JOB_POST = [
   "Know someone who fits? Please share this post.",
   "Regards,\nFINCLUST Recruitment",
 ].join("\n\n");
+
+/**
+ * The starting post for a channel. Only WhatsApp renders *stars* as bold;
+ * everywhere else they would show literally, so the others start plain.
+ */
+export function defaultPostFor(source: ApplicationSource): string {
+  return source === "WHATSAPP" ? DEFAULT_JOB_POST : DEFAULT_JOB_POST.replace(/\*/g, "");
+}
 
 const PLACEHOLDER = /\{(title|location|experience|employment|openings|skills|about|link)\}/g;
 const HAS_PLACEHOLDER = new RegExp(PLACEHOLDER.source);

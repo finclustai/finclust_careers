@@ -46,7 +46,6 @@ export interface Card {
   assignedRecruiter: { id: string; name: string } | null;
   jobOpening: { id: string; jobId: string; title: string };
   resume: { id: string; originalFileName: string; fileSize: number } | null;
-  candidateNote: string | null;
 }
 
 // Which cards are ticked for sharing. A context, so the columns and cards in
@@ -459,7 +458,8 @@ function CardFace({
   const router = useRouter();
   const selection = useContext(Selection);
   const openPanel = useContext(OpenPanel);
-  const noteCount = card.candidate._count.notes + (card.candidateNote ? 1 : 0);
+  // Team notes only: the candidate's own note is not something the team wrote.
+  const noteCount = card.candidate._count.notes;
   // Every stage but the current one (ADR-0008).
   const destinations = APPLICATION_STATUSES.filter((s) => canTransition(card.status, s));
   const experience = card.candidate.totalExperience;
@@ -515,11 +515,6 @@ function CardFace({
             {card.candidate.phone}
           </p>
         </div>
-
-        <WhatsAppButton
-          phone={card.candidate.phone}
-          candidateName={card.candidate.name}
-        />
       </div>
 
       {combined && (
@@ -543,7 +538,9 @@ function CardFace({
       </p>
 
       {onMove && (
+        // WhatsApp, notes and CV together, so the name gets the full card width.
         <div className="mt-2 flex gap-1.5">
+          <WhatsAppButton phone={card.candidate.phone} candidateName={card.candidate.name} />
           <button
             type="button"
             onClick={(event) => {

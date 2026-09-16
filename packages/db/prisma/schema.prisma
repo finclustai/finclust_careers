@@ -128,9 +128,13 @@ model JobOpening {
   // When on, the apply form shows an optional note box above the CV upload.
   candidateNoteEnabled Boolean @default(false) @map("candidate_note_enabled")
 
-  // This job's own WhatsApp/Telegram post, with {title}, {link} and other
-  // fill-ins. Null uses the default post from @finclust/domain.
+  // Replaced by shareMessages. Kept only until the code reading it is gone from
+  // production; the next migration drops it.
   shareMessage String? @map("share_message")
+
+  // Per channel post, keyed by source ("WHATSAPP", "LINKEDIN"...), with {title},
+  // {link} and other fill-ins. A missing key uses the default for that channel.
+  shareMessages Json @default("{}") @map("share_messages")
 
   // Trash: set when deleted, cleared on restore. Permanent delete removes the row.
   deletedAt DateTime? @map("deleted_at")

@@ -1,10 +1,9 @@
 "use client";
 
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useState, useTransition } from "react";
-import { ChevronDown, Loader2, Search, X } from "lucide-react";
+import { useRef, useState, useTransition } from "react";
+import { Loader2, Search, SlidersHorizontal, X } from "lucide-react";
 import { APPLICATION_SOURCES, APPLICATION_STATUSES, SOURCE_LABEL, STATUS_STYLE } from "@/lib/status";
-
 
 export interface FilterOptions {
   jobs: { id: string; jobId: string; title: string }[];
@@ -12,9 +11,12 @@ export interface FilterOptions {
   recruiters: { id: string; name: string }[];
 }
 
+const MORE = ["profileId", "status", "source", "appliedFrom", "appliedTo"] as const;
+
 /**
- * Every filter is reflected in the URL, so a filtered view is a link a recruiter
- * can send to a colleague or bookmark, and the browser back button restores it.
+ * One slim row like the board's: search as you type and a job picker, with the
+ * rarer filters behind "More filters". Every filter lives in the URL, so a
+ * filtered view can be bookmarked or sent to a colleague.
  */
 export function Filters({ options }: { options: FilterOptions }) {
   const router = useRouter();
@@ -22,6 +24,9 @@ export function Filters({ options }: { options: FilterOptions }) {
   const params = useSearchParams();
   const [pending, startTransition] = useTransition();
   const [search, setSearch] = useState(params.get("search") ?? "");
+  const moreActive = MORE.filter((key) => params.get(key)).length;
+  const [showMore, setShowMore] = useState(moreActive > 0);
+  const typing = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   function apply(changes: Record<string, string>) {
     const next = new URLSearchParams(params.toString());
@@ -29,129 +34,111 @@ export function Filters({ options }: { options: FilterOptions }) {
       if (value) next.set(key, value);
       else next.delete(key);
     }
-    // Any filter change returns to page one: staying on page 7 of a result set
-    // that now has two pages shows an empty screen for no reason.
+    // Back to page one: page 7 of a result set that now has two pages is empty.
     next.delete("page");
     startTransition(() => router.push(`${pathname}?${next}`));
   }
 
-  const active = ["jobOpeningId", "profileId", "recruiterId", "status", "source", "appliedFrom", "appliedTo", "search"]
-    .filter((key) => params.get(key));
+  // Results follow the typing, a moment after it pauses.
+  function type(value: string) {
+    setSearch(value);
+    clearTimeout(typing.current);
+    typing.current = setTimeout(() => apply({ search: value.trim() }), 350);
+  }
+
+  const anyActive = moreActive > 0 || Boolean(params.get("search")) || Boolean(params.get("jobOpeningId"));
 
   return (
-    <div className="card mb-4 p-3">
-      <form
-        onSubmit={(event) => {
-          event.preventDefault();
-          apply({ search });
-        }}
-        className="flex gap-2"
-      >
-        <div className="relative flex-1">
-          <Search
-            size={16}
-            strokeWidth={2}
-            aria-hidden
-            className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-mid"
-          />
+    <div className="mb-3">
+      <div className="flex flex-wrap gap-2">
+        <label className="relative min-w-0 flex-1 basis-60">
+          <span className="sr-only">Search applications</span>
+          <Search size={16} strokeWidth={2.5} aria-hidden className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-mid" />
           <input
             type="search"
             value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Name, phone, email, reference or job"
-            aria-label="Search applications"
-            className="field pl-9"
+            onChange={(event) => type(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key !== "Enter") return;
+              clearTimeout(typing.current);
+              apply({ search: search.trim() });
+            }}
+            placeholder="Name, phone, email or reference"
+            className="field !min-h-[44px] !pl-9 !pr-9"
           />
-        </div>
-        <button type="submit" className="btn btn-primary px-4">
-          {pending ? <Loader2 size={16} strokeWidth={2.5} aria-hidden className="animate-spin" /> : "Search"}
-        </button>
-      </form>
+          {pending && (
+            <Loader2 size={16} strokeWidth={2.5} aria-hidden className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-mid" />
+          )}
+        </label>
 
-      {/* The filter people reach for most, so it is never folded away. */}
-      <label className="mt-2 block">
-        <span className="sr-only">Filter by job</span>
-        <select
-          value={params.get("jobOpeningId") ?? ""}
-          onChange={(event) => apply({ jobOpeningId: event.target.value })}
-          className="field"
+        <label className="min-w-0 flex-1 basis-48 sm:max-w-xs">
+          <span className="sr-only">Filter by job</span>
+          <select
+            value={params.get("jobOpeningId") ?? ""}
+            onChange={(event) => apply({ jobOpeningId: event.target.value })}
+            className="field !min-h-[44px]"
+          >
+            <option value="">All jobs</option>
+            {options.jobs.map((job) => (
+              <option key={job.id} value={job.id}>
+                {job.title} ({job.jobId})
+              </option>
+            ))}
+          </select>
+        </label>
+
+        <button
+          type="button"
+          onClick={() => setShowMore((open) => !open)}
+          aria-expanded={showMore}
+          aria-controls="more-filters"
+          className={`btn !min-h-[44px] ${showMore || moreActive ? "btn-primary" : "btn-secondary"}`}
         >
-          <option value="">All jobs</option>
-          {options.jobs.map((job) => (
-            <option key={job.id} value={job.id}>
-              {job.title} ({job.jobId})
-            </option>
-          ))}
-        </select>
-      </label>
+          <SlidersHorizontal size={16} strokeWidth={2.5} aria-hidden />
+          More filters{moreActive ? ` (${moreActive})` : ""}
+        </button>
+      </div>
 
-      {/* On a phone six filter controls are a wall of form. They collapse behind
-          a disclosure that says how many are active; from tablet up there is
-          room to show them all and the disclosure is always open. */}
-      <details className="filters mt-2">
-        <summary className="text-link cursor-pointer list-none text-mid marker:hidden sm:hidden">
-          Filters{active.length ? ` (${active.length})` : ""}
-          <ChevronDown size={15} strokeWidth={2.5} aria-hidden />
-        </summary>
-
-        <div className="mt-2 grid grid-cols-2 gap-2 sm:mt-3 sm:grid-cols-3 lg:grid-cols-5">
-        <Select label="Profile" value={params.get("profileId") ?? ""} onChange={(v) => apply({ profileId: v })}>
-          {options.profiles.map((p) => (
-            <option key={p.id} value={p.id}>
-              {p.name}
-            </option>
-          ))}
-        </Select>
-
-        <Select label="Status" value={params.get("status") ?? ""} onChange={(v) => apply({ status: v })}>
-          {APPLICATION_STATUSES.map((s) => (
-            <option key={s} value={s}>
-              {STATUS_STYLE[s].label}
-            </option>
-          ))}
-        </Select>
-
-        <Select label="Source" value={params.get("source") ?? ""} onChange={(v) => apply({ source: v })}>
-          {APPLICATION_SOURCES.map((s) => (
-            <option key={s} value={s}>
-              {SOURCE_LABEL[s]}
-            </option>
-          ))}
-        </Select>
-
-        <label className="block">
-          <span className="mb-1 block text-xs font-bold text-mid">Applied from</span>
-          <input
-            type="date"
-            value={params.get("appliedFrom") ?? ""}
-            onChange={(event) => apply({ appliedFrom: event.target.value })}
-            className="field !py-2 sm:!min-h-[40px] sm:!text-[13px]"
-          />
-        </label>
-
-        <label className="block">
-          <span className="mb-1 block text-xs font-bold text-mid">Applied to</span>
-          <input
-            type="date"
-            value={params.get("appliedTo") ?? ""}
-            onChange={(event) => apply({ appliedTo: event.target.value })}
-            className="field !py-2 sm:!min-h-[40px] sm:!text-[13px]"
-          />
-        </label>
+      {showMore && (
+        <div id="more-filters" className="mt-2 grid grid-cols-2 gap-2 rounded-[14px] border-2 border-ink bg-paper p-3 sm:grid-cols-3 lg:grid-cols-5">
+          <Select label="Profile" value={params.get("profileId") ?? ""} onChange={(v) => apply({ profileId: v })}>
+            {options.profiles.map((p) => (
+              <option key={p.id} value={p.id}>
+                {p.name}
+              </option>
+            ))}
+          </Select>
+          <Select label="Status" value={params.get("status") ?? ""} onChange={(v) => apply({ status: v })}>
+            {APPLICATION_STATUSES.map((s) => (
+              <option key={s} value={s}>
+                {STATUS_STYLE[s].label}
+              </option>
+            ))}
+          </Select>
+          <Select label="Source" value={params.get("source") ?? ""} onChange={(v) => apply({ source: v })}>
+            {APPLICATION_SOURCES.map((s) => (
+              <option key={s} value={s}>
+                {SOURCE_LABEL[s]}
+              </option>
+            ))}
+          </Select>
+          <DateFilter label="Applied from" value={params.get("appliedFrom") ?? ""} onChange={(v) => apply({ appliedFrom: v })} />
+          <DateFilter label="Applied to" value={params.get("appliedTo") ?? ""} onChange={(v) => apply({ appliedTo: v })} />
         </div>
-      </details>
+      )}
 
-      {active.length > 0 && (
+      {anyActive && (
         <button
           type="button"
           onClick={() => {
+            clearTimeout(typing.current);
             setSearch("");
             startTransition(() => router.push(pathname));
           }}
           className="text-link mt-1 text-mid"
         >
           <X size={13} strokeWidth={2.5} aria-hidden />
-          Clear {active.length} filter{active.length === 1 ? "" : "s"}
+          Clear filters
         </button>
       )}
     </div>
@@ -170,16 +157,21 @@ function Select({
   children: React.ReactNode;
 }) {
   return (
-    <label className="block">
+    <label className="block min-w-0">
       <span className="mb-1 block text-xs font-bold text-mid">{label}</span>
-      <select
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        className="field !py-2 sm:!min-h-[40px] sm:!text-[13px]"
-      >
+      <select value={value} onChange={(event) => onChange(event.target.value)} className="field !min-h-[44px] !py-2 sm:!text-[13px]">
         <option value="">All</option>
         {children}
       </select>
+    </label>
+  );
+}
+
+function DateFilter({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <label className="block min-w-0">
+      <span className="mb-1 block text-xs font-bold text-mid">{label}</span>
+      <input type="date" value={value} onChange={(event) => onChange(event.target.value)} className="field !min-h-[44px] !py-2 sm:!text-[13px]" />
     </label>
   );
 }

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { DEFAULT_JOB_POST, buildJobPost } from "./job-post.js";
+import { DEFAULT_JOB_POST, buildJobPost, defaultPostFor } from "./job-post.js";
 
 const buildWhatsappPost = (job: Parameters<typeof buildJobPost>[0], url: string) => buildJobPost(job, url);
 
@@ -112,5 +112,18 @@ describe("buildJobPost with an edited template", () => {
   it("uses the default template when a job has none", () => {
     expect(buildJobPost(full, URL, null)).toBe(buildJobPost(full, URL, DEFAULT_JOB_POST));
     expect(DEFAULT_JOB_POST).toContain("{link}");
+  });
+});
+
+describe("defaultPostFor", () => {
+  // Only WhatsApp turns *stars* into bold; LinkedIn, Telegram and plain text
+  // would show them literally.
+  it("keeps bold markers for WhatsApp", () => {
+    expect(defaultPostFor("WHATSAPP")).toBe(DEFAULT_JOB_POST);
+  });
+
+  it.each(["TELEGRAM", "LINKEDIN", "WEBSITE", "REFERRAL", "OTHER"] as const)("drops them for %s", (source) => {
+    expect(defaultPostFor(source)).not.toContain("*");
+    expect(defaultPostFor(source)).toContain("{link}");
   });
 });

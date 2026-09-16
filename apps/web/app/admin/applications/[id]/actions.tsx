@@ -87,7 +87,7 @@ export function StatusControl({
             maxLength={1000}
             rows={2}
             autoFocus
-            placeholder={pending === "REJECTED" ? "e.g. Not enough R12 experience" : "e.g. Waiting for client feedback"}
+            placeholder={pending === "REJECTED" ? "e.g. Not enough R12 experience" : "e.g. Good fit for a later Oracle role"}
             className="field"
           />
           <div className="mt-2 flex gap-2">

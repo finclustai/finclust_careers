@@ -21,8 +21,6 @@ const CARD_FIELDS = {
   assignedRecruiter: { select: { id: true, name: true } },
   jobOpening: { select: { id: true, jobId: true, title: true } },
   resume: { select: { id: true, originalFileName: true, fileSize: true } },
-  // Counted in the board's note badge. At most 2,000 characters.
-  candidateNote: true,
 } satisfies Prisma.ApplicationSelect;
 
 // Columns page rather than load everything: one vacancy can hold hundreds.

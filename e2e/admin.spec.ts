@@ -160,19 +160,25 @@ test("jobs: list, new job defaults, clone, job page with QR and WhatsApp post", 
 
   await page.goto(`/admin/jobs/${job.id}`);
   await expect(page.getByRole("img", { name: /QR code/ })).toBeVisible();
-  const whatsappPost = page.getByLabel("WhatsApp post");
-  await expect(whatsappPost).toContainText("Hello everyone,");
-  await expect(whatsappPost).toContainText("*Location:* Hyderabad (Hybrid)");
-  await expect(whatsappPost).toContainText("source=whatsapp");
-  await expect(page.getByLabel("Telegram post")).toContainText("source=telegram");
-  await expect(page.getByRole("button", { name: "Copy link" })).toHaveCount(2);
+  const preview = page.getByLabel(/post preview$/);
+  await expect(preview).toContainText("Hello everyone,");
+  await expect(preview).toContainText("*Location:* Hyderabad (Hybrid)");
+  await expect(preview).toContainText("source=whatsapp");
+  // Every source has its own post; outside WhatsApp the bold stars are dropped.
+  for (const channel of ["Telegram", "LinkedIn", "Website", "Referral", "Other"]) {
+    await page.getByRole("tab", { name: new RegExp(`^${channel}`) }).click();
+    await expect(preview).toContainText(`source=${channel.toLowerCase()}`);
+    await expect(preview).not.toContainText("*");
+  }
+  await page.getByRole("tab", { name: /^LinkedIn/ }).click();
+  await expect(page.getByRole("link", { name: "Open LinkedIn" })).toBeVisible();
   await expectCleanLayout(page, info, "job-detail");
 
   await page.goto(`/admin/jobs/${job.id}/edit`);
   await expectCleanLayout(page, info, "job-edit");
 });
 
-test("share post: edit the message, facts follow job edits, reset", async ({ page }, info) => {
+test("share post: edit one channel's message, facts follow job edits, reset", async ({ page }, info) => {
   // Its own job, so devices running in parallel never edit the same message.
   const profiles = await (await page.request.get("/api/job-profiles")).json();
   const created = await page.request.post("/api/jobs", {
@@ -183,29 +189,34 @@ test("share post: edit the message, facts follow job edits, reset", async ({ pag
   await page.request.put(`/api/jobs/${job.id}/status`, { data: { status: "ACTIVE" } });
 
   await page.goto(`/admin/jobs/${job.id}`);
-  const whatsappPost = page.getByLabel("WhatsApp post");
-  await expect(whatsappPost).toContainText("*Location:* Chennai");
-  await page.getByRole("button", { name: "Edit message" }).click();
-  await page.fill("#share-template", "Now hiring *{title}* in {location}\n\nApply: {link}");
+  const preview = page.getByLabel(/post preview$/);
+  await page.getByRole("tab", { name: /^LinkedIn/ }).click();
+  await expect(preview).toContainText("Location: Chennai");
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
+  await page.fill("#share-template", "Now hiring {title} in {location}\n\nApply: {link}");
   // The preview follows the typing, before anything is saved.
-  await expect(whatsappPost).toContainText(`Now hiring *Post Role ${t}* in Chennai`);
-  await expect(whatsappPost).toContainText(`/apply/${job.jobId}?source=whatsapp`);
-  await expect(page.getByLabel("Telegram post")).toContainText("source=telegram");
+  await expect(preview).toContainText(`Now hiring Post Role ${t} in Chennai`);
+  await expect(preview).toContainText(`/apply/${job.jobId}?source=linkedin`);
   await expectCleanLayout(page, info, "share-edit");
-  await page.getByRole("button", { name: "Save message" }).click();
-  await expect(page.getByText("This job uses its own message.")).toBeVisible();
+  await page.getByRole("button", { name: "Save", exact: true }).click();
+  await expect(page.getByText("LinkedIn uses this job's own wording.")).toBeVisible();
+
+  // Only LinkedIn changed.
+  await page.getByRole("tab", { name: /^WhatsApp/ }).click();
+  await expect(preview).toContainText("Hello everyone,");
 
   // Editing the job changes the saved message's facts without touching the wording.
   await page.goto(`/admin/jobs/${job.id}/edit`);
   await page.fill("input[name=location]", "Kochi");
   await page.getByRole("button", { name: "Save changes" }).click();
   await expect(page).toHaveURL(new RegExp(`/admin/jobs/${job.id}$`));
-  await expect(page.getByLabel("WhatsApp post")).toContainText(`Now hiring *Post Role ${t}* in Kochi`);
+  await page.getByRole("tab", { name: /^LinkedIn/ }).click();
+  await expect(page.getByLabel(/post preview$/)).toContainText(`Now hiring Post Role ${t} in Kochi`);
 
-  await page.getByRole("button", { name: "Edit message" }).click();
+  await page.getByRole("button", { name: "Edit", exact: true }).click();
   await page.getByRole("button", { name: "Use default" }).click();
-  await expect(page.getByText("Using the default message.")).toBeVisible();
-  await expect(page.getByLabel("WhatsApp post")).toContainText("Hello everyone,");
+  await expect(page.getByText("LinkedIn uses the default wording.")).toBeVisible();
+  await expect(page.getByLabel(/post preview$/)).toContainText("Hello everyone,");
 });
 
 test("applications: job filter is always visible and filters", async ({ page }, info) => {
@@ -216,16 +227,29 @@ test("applications: job filter is always visible and filters", async ({ page }, 
   await jobFilter.selectOption({ label: `${job.title} (${job.jobId})` });
   await expect(page).toHaveURL(new RegExp(`jobOpeningId=${job.id}`));
   await expect(page.getByRole("link", { name: gamma.candidate.name, exact: true }).filter({ visible: true })).toBeVisible();
+
+  // Search follows typing, no button to press.
+  await page.getByRole("searchbox", { name: "Search applications" }).fill(gamma.candidate.name);
+  await expect(page).toHaveURL(/search=/);
+  await expect(page.getByText(/^1\s*matching$/)).toBeVisible();
+
+  await page.getByRole("button", { name: /^More filters/ }).click();
+  // On hold is shown as Future.
+  await page.getByRole("combobox", { name: "Status" }).selectOption({ label: "Future" });
+  await expect(page.getByRole("button", { name: "More filters (1)" })).toBeVisible();
   await expectCleanLayout(page, info, "applications-job-filter");
+  await page.getByRole("button", { name: "Clear filters" }).click();
+  await expect(page).toHaveURL(/\/admin\/applications$/);
 });
 
 test("board card: notes and CV side panel", async ({ page }, info) => {
   await page.goto(`/admin/jobs/${run().job.id}/board`);
   await page.getByPlaceholder("Name, phone or reference").fill(t);
   const alphaCard = card(page, alpha.candidate.name);
-  // Alpha has the candidate's own note and one team note from the earlier test.
+  // The count is team notes only: alpha has one from the earlier test, and the
+  // candidate's own note does not count.
   const notesButton = alphaCard.getByRole("button", { name: /^Notes for / });
-  await expect(notesButton).toHaveAccessibleName(`Notes for ${alpha.candidate.name}, 2`);
+  await expect(notesButton).toHaveAccessibleName(`Notes for ${alpha.candidate.name}, 1`);
   await notesButton.click();
 
   const panel = page.getByRole("dialog");
@@ -242,7 +266,8 @@ test("board card: notes and CV side panel", async ({ page }, info) => {
   await expectCleanLayout(page, info, "board-cv-panel");
   await panel.getByRole("button", { name: "Close" }).click();
   await expect(panel).toBeHidden();
-  await expect(notesButton).toHaveAccessibleName(`Notes for ${alpha.candidate.name}, 3`);
+  await expect(notesButton).toHaveAccessibleName(`Notes for ${alpha.candidate.name}, 2`);
+  await expect(alphaCard.getByRole("link", { name: /on WhatsApp$/ })).toBeVisible();
 });
 
 test("Word CV previews through Microsoft's viewer; PDF preview can go full screen", async ({ page }, info) => {

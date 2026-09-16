@@ -73,7 +73,9 @@ export const STATUS_STYLE: Record<
   ON_HOLD: {
     // The only dashed border in the system. Paused work looks provisional,
     // which is what it is, and it costs no colour.
-    label: "On hold",
+    // Stored as ON_HOLD; shown as Future: not right for this job now, worth
+    // contacting for later openings.
+    label: "Future",
     chip: "bg-paper border-ink border-dashed opacity-70",
     well: "bg-sand",
     dot: "bg-mid",

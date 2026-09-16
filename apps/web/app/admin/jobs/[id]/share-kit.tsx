@@ -1,50 +1,51 @@
 "use client";
 
 import { useState } from "react";
-import { AlertCircle, Check, Copy, Link2, Loader2, Pencil, RotateCcw, Send } from "lucide-react";
-import { DEFAULT_JOB_POST, buildJobPost, type PostableJob } from "@finclust/domain";
+import { AlertCircle, Check, Copy, ExternalLink, Link2, Loader2, Pencil, RotateCcw, Send } from "lucide-react";
+import { buildJobPost, defaultPostFor, type ApplicationSource, type PostableJob } from "@finclust/domain";
 import { WhatsAppIcon } from "@/components/whatsapp-icon";
 import { errorText, send } from "@/lib/client-api";
 import { SOURCE_LABEL } from "@/lib/status";
 
-interface Share {
-  links: { source: string; url: string; clickCount: number }[];
+export interface ShareLink {
+  source: ApplicationSource;
+  url: string;
+  clickCount: number;
   template: string;
   customTemplate: boolean;
 }
 
 const FILL_INS = ["{title}", "{location}", "{experience}", "{employment}", "{openings}", "{skills}", "{about}", "{link}"];
 
+const ICON: Partial<Record<ApplicationSource, React.ReactNode>> = {
+  WHATSAPP: <WhatsAppIcon size={15} className="text-[#128c4b]" />,
+  TELEGRAM: <Send size={14} strokeWidth={2.5} aria-hidden />,
+};
+
+// Where a channel has a share screen worth opening. The post is copied first.
+const OPEN: Partial<Record<ApplicationSource, (post: string, link: string) => { label: string; href: string }>> = {
+  WHATSAPP: (post) => ({ label: "Open WhatsApp", href: `https://wa.me/?text=${encodeURIComponent(post)}` }),
+  LINKEDIN: (_, link) => ({ label: "Open LinkedIn", href: `https://www.linkedin.com/sharing/share-offsite/?url=${encodeURIComponent(link)}` }),
+};
+
 /**
- * Nothing is sent from here (ADR-0005). The post is composed for a person to
- * paste into WhatsApp or Telegram groups, because no API can post to a group.
- *
- * The posts are built in the browser from the job's current details and the
- * template, with the same function the API uses. So they always match the job,
- * and change live while the template is being edited.
+ * Nothing is sent from here (ADR-0005). Pick a channel, see its post, copy it.
+ * Each channel has its own link, so applications are counted by where they came
+ * from, and its own wording. Posts are built in the browser from the job's
+ * current details with the same function the API uses, so they always match
+ * the job and follow edits as they are typed.
  */
-export function ShareKit({
-  jobUuid,
-  job,
-  share,
-  canEdit,
-}: {
-  jobUuid: string;
-  job: PostableJob;
-  share: Share;
-  canEdit: boolean;
-}) {
-  const [template, setTemplate] = useState(share.template);
-  const [saved, setSaved] = useState(share.template);
-  const [custom, setCustom] = useState(share.customTemplate);
-  const [editing, setEditing] = useState(false);
+export function ShareKit({ jobUuid, job, links, canEdit }: { jobUuid: string; job: PostableJob; links: ShareLink[]; canEdit: boolean }) {
+  const [all, setAll] = useState(links);
+  const [source, setSource] = useState<ApplicationSource>("WHATSAPP");
+  const [draft, setDraft] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState<string | null>(null);
 
-  const link = (source: string) => share.links.find((l) => l.source === source)?.url ?? "";
-  const whatsapp = buildJobPost(job, link("WHATSAPP"), template);
-  const telegram = buildJobPost(job, link("TELEGRAM"), template);
+  const current = all.find((l) => l.source === source) ?? all[0];
+  const post = buildJobPost(job, current.url, draft ?? current.template);
+  const open = OPEN[current.source]?.(post, current.url);
 
   async function copy(text: string, key: string) {
     try {
@@ -56,16 +57,25 @@ export function ShareKit({
     }
   }
 
-  async function save(next: string | null) {
+  function pick(next: ApplicationSource) {
+    setSource(next);
+    setDraft(null);
+    setError(null);
+  }
+
+  async function save(message: string | null) {
     setBusy(true);
     setError(null);
     try {
-      await send("PUT", `/jobs/${jobUuid}`, { shareMessage: next });
-      const value = next ?? DEFAULT_JOB_POST;
-      setTemplate(value);
-      setSaved(value);
-      setCustom(next !== null);
-      setEditing(false);
+      await send("PUT", `/jobs/${jobUuid}/share-message`, { source: current.source, message });
+      setAll((links) =>
+        links.map((l) =>
+          l.source === current.source
+            ? { ...l, template: message?.trim() || defaultPostFor(l.source), customTemplate: Boolean(message?.trim()) }
+            : l,
+        ),
+      );
+      setDraft(null);
     } catch (caught) {
       setError(errorText(caught));
     } finally {
@@ -73,47 +83,52 @@ export function ShareKit({
     }
   }
 
-  const CopyLabel = ({ id, label }: { id: string; label: string }) =>
-    copied === id ? (
-      <>
-        <Check size={16} strokeWidth={2.5} aria-hidden /> Copied
-      </>
-    ) : (
-      <>
-        {label === "Copy link" ? <Link2 size={16} strokeWidth={2.5} aria-hidden /> : <Copy size={16} strokeWidth={2.5} aria-hidden />}
-        {label}
-      </>
-    );
+  const label = SOURCE_LABEL[current.source];
 
   return (
-    <>
-      <section className="card mt-5 p-4">
-        <div className="flex flex-wrap items-start justify-between gap-2">
-          <div>
-            <h2 className="text-sm font-extrabold">Post for WhatsApp and Telegram</h2>
-            <p className="hint">
-              {custom ? "This job uses its own message." : "Using the default message."} Details and links fill in from the
-              job, so they stay current when the job is edited.
-            </p>
-          </div>
-          {canEdit && !editing && (
-            <button type="button" onClick={() => setEditing(true)} className="action">
-              <Pencil size={14} strokeWidth={2.5} aria-hidden />
-              Edit message
-            </button>
-          )}
-        </div>
+    <section className="card mt-5 p-4">
+      <h2 className="text-sm font-extrabold">Share this job</h2>
+      <p className="hint">Pick where you are posting. The job&apos;s details and that channel&apos;s own link fill in automatically.</p>
 
-        {editing && (
-          <div className="mt-3 rounded-[10px] border-2 border-ink bg-sand p-3">
+      <div role="tablist" aria-label="Channel" className="mt-3 flex flex-wrap gap-1.5">
+        {all.map((l) => (
+          <button
+            key={l.source}
+            type="button"
+            role="tab"
+            aria-selected={l.source === current.source}
+            onClick={() => pick(l.source)}
+            className={`inline-flex min-h-[44px] items-center gap-1.5 rounded-[10px] border-2 px-3 text-[13px] font-bold ${
+              l.source === current.source ? "border-ink bg-orange-tint" : "border-line bg-paper hover:border-ink"
+            }`}
+          >
+            {ICON[l.source]}
+            {SOURCE_LABEL[l.source]}
+            <span className="tnum font-normal text-mid" title="Link opens">
+              {l.clickCount}
+            </span>
+          </button>
+        ))}
+      </div>
+
+      <div role="tabpanel" aria-label={`${label} post`} className="mt-3">
+        {draft === null ? (
+          <pre
+            aria-label={`${label} post preview`}
+            className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-[10px] border-2 border-ink bg-sand p-3 font-sans text-sm leading-relaxed"
+          >
+            {post}
+          </pre>
+        ) : (
+          <div className="rounded-[10px] border-2 border-ink bg-sand p-3">
             <label htmlFor="share-template" className="label">
-              Message
+              {label} message
             </label>
             <textarea
               id="share-template"
-              value={template}
-              onChange={(event) => setTemplate(event.target.value)}
-              rows={12}
+              value={draft}
+              onChange={(event) => setDraft(event.target.value)}
+              rows={10}
               maxLength={4000}
               className="field font-mono !text-sm"
             />
@@ -124,126 +139,71 @@ export function ShareKit({
                   {f}
                 </code>
               ))}
-              A line is left out when the job has no value for it. Use *stars* for bold.
+              A line is left out when the job has no value for it.
             </p>
-            {error && (
-              <p role="alert" className="error">
-                <AlertCircle size={15} strokeWidth={2} aria-hidden className="mt-px shrink-0" />
-                {error}
-              </p>
-            )}
-            <div className="mt-3 flex flex-wrap gap-2">
-              <button type="button" disabled={busy || !template.trim()} onClick={() => save(template)} className="btn btn-primary flex-1">
-                {busy && <Loader2 size={16} strokeWidth={2.5} aria-hidden className="animate-spin" />}
-                Save message
-              </button>
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => {
-                  setTemplate(saved);
-                  setEditing(false);
-                  setError(null);
-                }}
-                className="btn btn-secondary"
-              >
-                Cancel
-              </button>
-              {custom && (
-                <button type="button" disabled={busy} onClick={() => save(null)} className="btn btn-secondary">
-                  <RotateCcw size={16} strokeWidth={2.5} aria-hidden />
-                  Use default
-                </button>
-              )}
-            </div>
+            <p className="label mt-3">Preview</p>
+            <pre
+              aria-label={`${label} post preview`}
+              className="max-h-60 overflow-auto whitespace-pre-wrap break-words rounded-[10px] border-2 border-line bg-paper p-3 font-sans text-sm leading-relaxed"
+            >
+              {post}
+            </pre>
           </div>
         )}
 
-        <div className="mt-4 grid grid-cols-[minmax(0,1fr)] gap-4 lg:grid-cols-2">
-          <Channel
-            title="WhatsApp"
-            icon={<WhatsAppIcon size={17} className="text-[#128c4b]" />}
-            message={whatsapp}
-            actions={
-              <>
-                <button type="button" onClick={() => copy(whatsapp, "wa-post")} className="btn btn-primary flex-1">
-                  <CopyLabel id="wa-post" label="Copy post" />
-                </button>
-                <button type="button" onClick={() => copy(link("WHATSAPP"), "wa-link")} className="btn btn-secondary flex-1">
-                  <CopyLabel id="wa-link" label="Copy link" />
-                </button>
-                <a
-                  href={`https://wa.me/?text=${encodeURIComponent(whatsapp)}`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="btn btn-secondary w-full"
-                >
-                  <WhatsAppIcon size={17} className="text-[#128c4b]" />
-                  Open WhatsApp
-                </a>
-              </>
-            }
-          />
-          <Channel
-            title="Telegram"
-            icon={<Send size={16} strokeWidth={2.5} aria-hidden />}
-            message={telegram}
-            actions={
-              <>
-                <button type="button" onClick={() => copy(telegram, "tg-post")} className="btn btn-primary flex-1">
-                  <CopyLabel id="tg-post" label="Copy post" />
-                </button>
-                <button type="button" onClick={() => copy(link("TELEGRAM"), "tg-link")} className="btn btn-secondary flex-1">
-                  <CopyLabel id="tg-link" label="Copy link" />
-                </button>
-              </>
-            }
-          />
-        </div>
-      </section>
+        {error && (
+          <p role="alert" className="error">
+            <AlertCircle size={15} strokeWidth={2} aria-hidden className="mt-px shrink-0" />
+            {error}
+          </p>
+        )}
 
-      <section className="card mt-4 p-4">
-        <h2 className="text-sm font-extrabold">Application links</h2>
-        <p className="hint">One per source. Whichever a candidate uses is recorded against their application.</p>
-
-        <ul className="mt-3 space-y-2">
-          {share.links.map((l) => (
-            <li key={l.source} className="flex items-center gap-2 rounded-[10px] border-2 border-ink bg-paper p-2">
-              <span className="w-[74px] shrink-0 text-xs font-bold">{SOURCE_LABEL[l.source] ?? l.source}</span>
-              <code className="min-w-0 flex-1 truncate font-mono text-xs text-mid">{l.url}</code>
-              <span className="tnum shrink-0 text-xs text-mid" title="Link opens">
-                {l.clickCount}
-              </span>
-              <button
-                type="button"
-                onClick={() => copy(l.url, l.source)}
-                aria-label={`Copy the ${SOURCE_LABEL[l.source] ?? l.source} link`}
-                className="icon-button shrink-0 border-2 border-ink bg-sand"
-              >
-                {copied === l.source ? <Check size={14} strokeWidth={2.5} aria-hidden /> : <Copy size={14} strokeWidth={2.5} aria-hidden />}
+        {draft === null ? (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" onClick={() => copy(post, "post")} className="btn btn-primary flex-1 basis-32">
+              {copied === "post" ? <Check size={16} strokeWidth={2.5} aria-hidden /> : <Copy size={16} strokeWidth={2.5} aria-hidden />}
+              {copied === "post" ? "Copied" : "Copy post"}
+            </button>
+            <button type="button" onClick={() => copy(current.url, "link")} className="btn btn-secondary flex-1 basis-32">
+              {copied === "link" ? <Check size={16} strokeWidth={2.5} aria-hidden /> : <Link2 size={16} strokeWidth={2.5} aria-hidden />}
+              {copied === "link" ? "Copied" : "Copy link"}
+            </button>
+            {canEdit && (
+              <button type="button" onClick={() => setDraft(current.template)} className="btn btn-secondary flex-1 basis-32">
+                <Pencil size={16} strokeWidth={2.5} aria-hidden />
+                Edit
               </button>
-            </li>
-          ))}
-        </ul>
-      </section>
-    </>
-  );
-}
+            )}
+            {open && (
+              <a href={open.href} target="_blank" rel="noopener noreferrer" className="btn btn-secondary flex-1 basis-40">
+                {current.source === "WHATSAPP" ? <WhatsAppIcon size={17} className="text-[#128c4b]" /> : <ExternalLink size={16} strokeWidth={2.5} aria-hidden />}
+                {open.label}
+              </a>
+            )}
+          </div>
+        ) : (
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button type="button" disabled={busy || !draft.trim()} onClick={() => save(draft)} className="btn btn-primary flex-1 basis-32">
+              {busy && <Loader2 size={16} strokeWidth={2.5} aria-hidden className="animate-spin" />}
+              Save
+            </button>
+            <button type="button" disabled={busy} onClick={() => setDraft(null)} className="btn btn-secondary flex-1 basis-32">
+              Cancel
+            </button>
+            {current.customTemplate && (
+              <button type="button" disabled={busy} onClick={() => save(null)} className="btn btn-secondary flex-1 basis-32">
+                <RotateCcw size={16} strokeWidth={2.5} aria-hidden />
+                Use default
+              </button>
+            )}
+          </div>
+        )}
 
-function Channel({ title, icon, message, actions }: { title: string; icon: React.ReactNode; message: string; actions: React.ReactNode }) {
-  return (
-    <div className="flex flex-col">
-      <h3 className="flex items-center gap-1.5 text-sm font-extrabold">
-        {icon}
-        {title}
-      </h3>
-      <pre
-        aria-label={`${title} post`}
-        className="mt-2 max-h-72 flex-1 overflow-auto whitespace-pre-wrap break-words rounded-[10px] border-2 border-ink bg-sand p-3 font-sans text-xs leading-relaxed"
-      >
-        {message}
-      </pre>
-      <div className="mt-3 flex flex-wrap gap-2">{actions}</div>
-    </div>
+        <p className="hint mt-2">
+          {current.customTemplate ? `${label} uses this job's own wording.` : `${label} uses the default wording.`}{" "}
+          <span className="break-all font-mono">{current.url}</span>
+        </p>
+      </div>
+    </section>
   );
 }

@@ -116,10 +116,20 @@ export class JobsService {
         openings: dto.openings,
         closesAt: dto.closesAt === undefined ? undefined : dto.closesAt ? new Date(dto.closesAt) : null,
         candidateNoteEnabled: dto.candidateNoteEnabled,
-        shareMessage: dto.shareMessage === undefined ? undefined : dto.shareMessage?.trim() || null,
       },
       include: { profile: true },
     });
+  }
+
+  /** Saves one channel's post for this job, or clears it back to the default. */
+  async setShareMessage(id: string, source: string, message: string | null | undefined) {
+    const job = await this.findOne(id);
+    const messages = { ...(job.shareMessages as Record<string, string>) };
+    const text = message?.trim();
+    if (text) messages[source] = text;
+    else delete messages[source];
+    await this.prisma.client.jobOpening.update({ where: { id }, data: { shareMessages: messages } });
+    return { source, message: text || null };
   }
 
   /**

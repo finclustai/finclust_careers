@@ -36,7 +36,7 @@ export function CardPanel({
   const dialog = useRef<HTMLDialogElement>(null);
   const [detail, setDetail] = useState<Detail | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const noteCount = card.candidate._count.notes + (card.candidateNote ? 1 : 0);
+  const noteCount = card.candidate._count.notes;
 
   useEffect(() => {
     dialog.current?.showModal();
