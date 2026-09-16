@@ -1,5 +1,6 @@
 export const APPLICATION_SOURCES = [
   "WHATSAPP",
+  "TELEGRAM",
   "LINKEDIN",
   "WEBSITE",
   "REFERRAL",

@@ -6,6 +6,10 @@ describe("normaliseSource", () => {
     expect(normaliseSource("whatsapp")).toBe("WHATSAPP");
   });
 
+  it("recognises Telegram links", () => {
+    expect(normaliseSource("telegram")).toBe("TELEGRAM");
+  });
+
   it.each(APPLICATION_SOURCES)("accepts %s", (source) => {
     expect(normaliseSource(source.toLowerCase())).toBe(source);
   });

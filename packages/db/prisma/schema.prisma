@@ -47,9 +47,10 @@ enum EmploymentType {
   INTERNSHIP
 }
 
-// Fixed five-value list, so an enum rather than a lookup table.
+// Fixed short list, so an enum rather than a lookup table.
 enum ApplicationSource {
   WHATSAPP
+  TELEGRAM
   LINKEDIN
   WEBSITE
   REFERRAL
@@ -126,6 +127,10 @@ model JobOpening {
 
   // When on, the apply form shows an optional note box above the CV upload.
   candidateNoteEnabled Boolean @default(false) @map("candidate_note_enabled")
+
+  // This job's own WhatsApp/Telegram post, with {title}, {link} and other
+  // fill-ins. Null uses the default post from @finclust/domain.
+  shareMessage String? @map("share_message")
 
   // Trash: set when deleted, cleared on restore. Permanent delete removes the row.
   deletedAt DateTime? @map("deleted_at")

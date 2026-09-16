@@ -1,6 +1,7 @@
 import { APPLICATION_STATUSES, type ApplicationStatus } from "@finclust/domain";
 
 export { APPLICATION_STATUSES, type ApplicationStatus };
+export { APPLICATION_SOURCES } from "@finclust/domain";
 export { canTransition } from "@finclust/domain";
 
 /**
@@ -81,6 +82,7 @@ export const STATUS_STYLE: Record<
 
 export const SOURCE_LABEL: Record<string, string> = {
   WHATSAPP: "WhatsApp",
+  TELEGRAM: "Telegram",
   LINKEDIN: "LinkedIn",
   WEBSITE: "Website",
   REFERRAL: "Referral",

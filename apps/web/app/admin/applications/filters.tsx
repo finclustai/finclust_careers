@@ -3,9 +3,8 @@
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useState, useTransition } from "react";
 import { ChevronDown, Loader2, Search, X } from "lucide-react";
-import { APPLICATION_STATUSES, STATUS_STYLE } from "@/lib/status";
+import { APPLICATION_SOURCES, APPLICATION_STATUSES, SOURCE_LABEL, STATUS_STYLE } from "@/lib/status";
 
-const SOURCES = ["WHATSAPP", "LINKEDIN", "WEBSITE", "REFERRAL", "OTHER"] as const;
 
 export interface FilterOptions {
   jobs: { id: string; jobId: string; title: string }[];
@@ -104,9 +103,9 @@ export function Filters({ options }: { options: FilterOptions }) {
         </Select>
 
         <Select label="Source" value={params.get("source") ?? ""} onChange={(v) => apply({ source: v })}>
-          {SOURCES.map((s) => (
+          {APPLICATION_SOURCES.map((s) => (
             <option key={s} value={s}>
-              {s.charAt(0) + s.slice(1).toLowerCase()}
+              {SOURCE_LABEL[s]}
             </option>
           ))}
         </Select>

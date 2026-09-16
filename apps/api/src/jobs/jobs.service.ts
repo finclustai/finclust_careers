@@ -116,6 +116,7 @@ export class JobsService {
         openings: dto.openings,
         closesAt: dto.closesAt === undefined ? undefined : dto.closesAt ? new Date(dto.closesAt) : null,
         candidateNoteEnabled: dto.candidateNoteEnabled,
+        shareMessage: dto.shareMessage === undefined ? undefined : dto.shareMessage?.trim() || null,
       },
       include: { profile: true },
     });

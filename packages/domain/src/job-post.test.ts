@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
-import { buildWhatsappPost } from "./job-post.js";
+import { DEFAULT_JOB_POST, buildJobPost } from "./job-post.js";
+
+const buildWhatsappPost = (job: Parameters<typeof buildJobPost>[0], url: string) => buildJobPost(job, url);
 
 const URL = "https://careers.finclust.ai/apply/BAX-EBS-01?source=whatsapp";
 const full = {
@@ -70,5 +72,45 @@ describe("buildWhatsappPost", () => {
 
   it("shows a remote job's mode on its own when there is no location", () => {
     expect(buildWhatsappPost({ ...full, location: null, workMode: "REMOTE" }, URL)).toContain("*Location:* Remote");
+  });
+});
+
+describe("buildJobPost with an edited template", () => {
+  it("fills every placeholder from the job", () => {
+    const post = buildJobPost(full, URL, "Hiring {title} in {location}, {experience}. Skills: {skills}. {employment}, {openings} openings. Apply: {link}");
+    expect(post).toBe(
+      `Hiring EBS R12 FUNCTIONAL in Hyderabad/Gurugram (On-site), 4-10 years. Skills: Oracle EBS R12, GL, AP. Contract, 2 openings. Apply: ${URL}`,
+    );
+  });
+
+  // The whole point of saving a template rather than text: editing the job
+  // later changes the post without anyone rewriting it.
+  it("picks up a changed job without touching the template", () => {
+    const template = "*{title}*\nLocation: {location}\n{link}";
+    expect(buildJobPost({ ...full, location: "Pune", workMode: null }, URL, template)).toBe(`*EBS R12 FUNCTIONAL*\nLocation: Pune\n${URL}`);
+  });
+
+  it("puts each channel's own link in", () => {
+    expect(buildJobPost(full, "https://x/apply/A?source=telegram", "Apply: {link}")).toBe("Apply: https://x/apply/A?source=telegram");
+  });
+
+  it("drops a line whose fact the job does not have", () => {
+    expect(buildJobPost({ ...full, location: null, workMode: null }, URL, "Role: {title}\nLocation: {location}\nEnd")).toBe(
+      "Role: EBS R12 FUNCTIONAL\nEnd",
+    );
+  });
+
+  it("drops a paragraph when every fact in it is missing", () => {
+    const template = "Intro\n\n*About the role*\n{about}\n\nBye";
+    expect(buildJobPost({ ...full, description: null }, URL, template)).toBe("Intro\n\nBye");
+  });
+
+  it("leaves unknown braces as written", () => {
+    expect(buildJobPost(full, URL, "Use {code} {title}")).toBe("Use {code} EBS R12 FUNCTIONAL");
+  });
+
+  it("uses the default template when a job has none", () => {
+    expect(buildJobPost(full, URL, null)).toBe(buildJobPost(full, URL, DEFAULT_JOB_POST));
+    expect(DEFAULT_JOB_POST).toContain("{link}");
   });
 });

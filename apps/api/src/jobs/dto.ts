@@ -42,6 +42,9 @@ export class CreateJobOpeningDto {
   @IsOptional() @IsISO8601() closesAt?: string | null;
 
   @IsOptional() @IsBoolean() candidateNoteEnabled?: boolean;
+
+  // The job's own WhatsApp/Telegram post template; null goes back to the default.
+  @IsOptional() @IsString() @MaxLength(4000) shareMessage?: string | null;
 }
 
 export class UpdateJobOpeningDto extends CreateJobOpeningDto {

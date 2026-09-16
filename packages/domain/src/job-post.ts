@@ -16,34 +16,57 @@ const EMPLOYMENT = { FULL_TIME: "Full-time", CONTRACT: "Contract", INTERNSHIP: "
 const ABOUT_MAX = 300;
 
 /**
- * The post a recruiter pastes into WhatsApp groups (ADR-0005). Written to read
- * like a person wrote it, with only the facts the job actually has.
+ * The post recruiters paste into WhatsApp and Telegram groups (ADR-0005). A job
+ * can save its own version; the facts stay as fill-ins, so editing the job
+ * updates the post. Fill-ins: {title} {location} {experience} {employment}
+ * {openings} {skills} {about} {link}.
  *
- * The client is deliberately never named: it invites candidates and other
- * agencies to approach the client directly.
+ * The client is deliberately not a fill-in: naming them invites candidates and
+ * other agencies to approach the client directly.
  */
-export function buildWhatsappPost(job: PostableJob, applyUrl: string): string {
-  const facts: string[] = [];
+export const DEFAULT_JOB_POST = [
+  "Hello everyone,",
+  "FINCLUST is hiring for the role of\n*{title}*",
+  "*Location:* {location}\n*Experience:* {experience}\n*Employment:* {employment}\n*Openings:* {openings}\n*Key skills:* {skills}",
+  "*About the role*\n{about}",
+  "If you are interested, apply here with your CV (takes about a minute):\n{link}",
+  "Know someone who fits? Please share this post.",
+  "Regards,\nFINCLUST Recruitment",
+].join("\n\n");
+
+const PLACEHOLDER = /\{(title|location|experience|employment|openings|skills|about|link)\}/g;
+const HAS_PLACEHOLDER = new RegExp(PLACEHOLDER.source);
+
+/**
+ * Fills a post template. A line whose fact the job lacks is dropped, and a
+ * paragraph whose facts are all missing is dropped whole, so a sparse job
+ * never shows "Location: " or an empty "About the role".
+ */
+export function buildJobPost(job: PostableJob, applyUrl: string, template?: string | null): string {
   const mode = job.workMode ? WORK_MODE[job.workMode] : null;
-  const where = job.location ? `${job.location}${mode ? ` (${mode})` : ""}` : mode;
-  if (where) facts.push(`*Location:* ${where}`);
-  const experience = experienceBand(job.minExperience, job.maxExperience);
-  if (experience) facts.push(`*Experience:* ${experience}`);
-  if (job.employmentType) facts.push(`*Employment:* ${EMPLOYMENT[job.employmentType]}`);
-  if (job.openings > 1) facts.push(`*Openings:* ${job.openings}`);
-  if (job.requiredSkills.length) facts.push(`*Key skills:* ${job.requiredSkills.join(", ")}`);
+  const values: Record<string, string> = {
+    title: job.title,
+    location: job.location ? `${job.location}${mode ? ` (${mode})` : ""}` : (mode ?? ""),
+    experience: experienceBand(job.minExperience, job.maxExperience) ?? "",
+    employment: job.employmentType ? EMPLOYMENT[job.employmentType] : "",
+    openings: job.openings > 1 ? String(job.openings) : "",
+    skills: job.requiredSkills.join(", "),
+    about: summarise(job.description) ?? "",
+    link: applyUrl,
+  };
 
-  const about = summarise(job.description);
-
-  return [
-    `Hello everyone,\n\nFINCLUST is hiring for the role of\n*${job.title}*`,
-    facts.join("\n"),
-    about && `*About the role*\n${about}`,
-    `If you are interested, apply here with your CV (takes about a minute):\n${applyUrl}`,
-    "Know someone who fits? Please share this post.",
-    "Regards,\nFINCLUST Recruitment",
-  ]
-    .filter(Boolean)
+  return (template?.trim() ? template : DEFAULT_JOB_POST)
+    .replace(/\r\n/g, "\n")
+    .split(/\n\s*\n/)
+    .map((paragraph) => {
+      const lines = paragraph.split("\n").filter((line) => {
+        const keys = [...line.matchAll(PLACEHOLDER)].map((m) => m[1]);
+        return keys.every((key) => values[key] !== "");
+      });
+      if (HAS_PLACEHOLDER.test(paragraph) && !lines.some((line) => HAS_PLACEHOLDER.test(line))) return "";
+      return lines.map((line) => line.replace(PLACEHOLDER, (_, key: string) => values[key])).join("\n");
+    })
+    .filter((paragraph) => paragraph.trim() !== "")
     .join("\n\n");
 }
 

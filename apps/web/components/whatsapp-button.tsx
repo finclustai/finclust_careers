@@ -1,6 +1,6 @@
 "use client";
 
-import { MessageCircle } from "lucide-react";
+import { WhatsAppIcon } from "./whatsapp-icon";
 import { whatsappChatUrl } from "@/lib/whatsapp";
 
 export function WhatsAppButton({
@@ -30,7 +30,7 @@ export function WhatsAppButton({
         size === "sm" ? "size-11 md:size-9" : "size-11",
       ].join(" ")}
     >
-      <MessageCircle size={px} strokeWidth={2.5} aria-hidden />
+      <WhatsAppIcon size={px + 2} className="text-[#128c4b]" />
     </a>
   );
 }

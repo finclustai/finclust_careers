@@ -1,5 +1,5 @@
 import { Injectable } from "@nestjs/common";
-import { APPLICATION_SOURCES, buildWhatsappPost, type ApplicationSource, type PostableJob } from "@finclust/domain";
+import { APPLICATION_SOURCES, DEFAULT_JOB_POST, buildJobPost, type ApplicationSource, type PostableJob } from "@finclust/domain";
 
 export interface ShareLink {
   source: ApplicationSource;
@@ -9,13 +9,18 @@ export interface ShareLink {
 
 export interface ShareKit {
   links: ShareLink[];
-  /** Ready to paste into a WhatsApp group. Nothing is sent (ADR-0005). */
+  /** Ready to paste into a group. Nothing is sent (ADR-0005). */
   whatsappMessage: string;
   whatsappShareUrl: string;
+  telegramMessage: string;
+  /** What the editor shows: the job's own template, or the default. */
+  template: string;
+  customTemplate: boolean;
 }
 
 interface ShareableJob extends PostableJob {
   jobId: string;
+  shareMessage: string | null;
   applicationLinks?: { source: ApplicationSource; clickCount: number }[];
 }
 
@@ -31,11 +36,16 @@ export class PublicLinksService {
       clickCount: counts.get(source) ?? 0,
     }));
 
-    const message = buildWhatsappPost(job, this.applyUrl(job.jobId, "WHATSAPP"));
+    // One template, each channel with its own link, so applications from a
+    // Telegram group are counted as Telegram.
+    const message = buildJobPost(job, this.applyUrl(job.jobId, "WHATSAPP"), job.shareMessage);
     return {
       links,
       whatsappMessage: message,
       whatsappShareUrl: `https://wa.me/?text=${encodeURIComponent(message)}`,
+      telegramMessage: buildJobPost(job, this.applyUrl(job.jobId, "TELEGRAM"), job.shareMessage),
+      template: job.shareMessage ?? DEFAULT_JOB_POST,
+      customTemplate: job.shareMessage !== null,
     };
   }
 

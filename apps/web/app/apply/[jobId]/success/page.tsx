@@ -1,5 +1,6 @@
 import Link from "next/link";
-import { CheckCircle2, MessageCircle, Search } from "lucide-react";
+import { CheckCircle2, Search } from "lucide-react";
+import { WhatsAppIcon } from "@/components/whatsapp-icon";
 import { CopyReference } from "./copy-reference";
 
 export const dynamic = "force-dynamic";
@@ -76,7 +77,7 @@ Check status: https://careers.finclust.ai/status`,
             rel="noopener noreferrer"
             className="btn btn-secondary mt-2.5 w-full"
           >
-            <MessageCircle size={17} strokeWidth={2.5} aria-hidden />
+            <WhatsAppIcon size={18} />
             Save to my WhatsApp
           </a>
 

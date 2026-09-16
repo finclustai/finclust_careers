@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Check, Copy, MessageCircle } from "lucide-react";
+import { Check, Copy } from "lucide-react";
+import { WhatsAppIcon } from "@/components/whatsapp-icon";
 import { SOURCE_LABEL } from "@/lib/status";
 
 interface Share {
@@ -61,7 +62,7 @@ export function ShareKit({ share }: { share: Share }) {
             rel="noopener noreferrer"
             className="btn btn-secondary flex-1"
           >
-            <MessageCircle size={17} strokeWidth={2.5} aria-hidden />
+            <WhatsAppIcon size={18} />
             Open WhatsApp
           </a>
         </div>
