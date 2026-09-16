@@ -12,8 +12,13 @@ Nothing is converted. Word files are stored exactly as uploaded.
   written: `%PDF-` for PDF, `PK\x03\x04` for DOCX, `D0 CF 11 E0` for DOC. The
   client-declared content type is still not trusted.
 - The storage bucket accepts all three MIME types; the 10 MB limit is unchanged.
-- PDFs keep the inline preview. A browser cannot render Word inline, so a Word
-  CV shows a download control in the preview panel instead of an empty frame.
-- Word downloads are always served as attachments. A Word file from an unknown
-  sender can carry active content, so it is never rendered in the recruiter's
-  browser.
+- PDFs preview in the browser's own PDF viewer. Where a browser has none
+  (Android Chrome), the panel offers Open and Download instead of a frame that
+  would silently download.
+- Word CVs preview through Microsoft's Office viewer (view.officeapps.live.com),
+  which fetches the file once from a 60-second signed URL. The file therefore
+  passes through Microsoft to be displayed; it is not stored there. This was an
+  explicit choice over a text-only conversion, for the real layout.
+- A Word file is still never rendered on our own origin: it is shown inside
+  Microsoft's viewer or downloaded as an attachment, so any active content in it
+  cannot run against the admin console.

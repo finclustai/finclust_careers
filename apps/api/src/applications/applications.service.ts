@@ -13,11 +13,16 @@ const CARD_FIELDS = {
   source: true,
   appliedAt: true,
   candidate: {
-    select: { id: true, name: true, phone: true, location: true, totalExperience: true },
+    select: {
+      id: true, name: true, phone: true, location: true, totalExperience: true,
+      _count: { select: { notes: true } },
+    },
   },
   assignedRecruiter: { select: { id: true, name: true } },
   jobOpening: { select: { id: true, jobId: true, title: true } },
-  resume: { select: { id: true } },
+  resume: { select: { id: true, originalFileName: true, fileSize: true } },
+  // Counted in the board's note badge. At most 2,000 characters.
+  candidateNote: true,
 } satisfies Prisma.ApplicationSelect;
 
 // Columns page rather than load everything: one vacancy can hold hundreds.
@@ -360,10 +365,13 @@ export class ApplicationsService {
   }
 
   /**
-   * Resumes are never served by this API (ADR-0003). Two short-lived signed URLs
-   * are minted after the role check: one that renders in the preview iframe and
-   * one that saves to disk. They differ only in Content-Disposition, and a
-   * single URL cannot do both.
+   * Resumes are never served by this API (ADR-0003). Short-lived signed URLs
+   * are minted after the role check: one to view, one that saves to disk. They
+   * differ only in Content-Disposition, and a single URL cannot do both.
+   *
+   * PDFs render in the browser's own viewer. Word files render in Microsoft's
+   * Office viewer, which fetches the file from the signed URL once; they are
+   * never rendered on our own origin (ADR-0009).
    */
   async resumeUrls(applicationId: string, user: SessionUser) {
     const application = await this.prisma.client.application.findFirst({
@@ -379,15 +387,13 @@ export class ApplicationsService {
     const { storagePath, mimeType, originalFileName } = application.resume;
     const safeName = application.candidate.name.replace(/[^a-zA-Z0-9]+/g, "-").toLowerCase();
     const extension = /\.(pdf|docx|doc)$/i.exec(originalFileName)?.[1]?.toLowerCase() ?? "pdf";
-    const previewable = isPreviewable(mimeType);
+    const viewer = isPreviewable(mimeType) ? "pdf" : "office";
 
-    // No inline URL is ever minted for a Word file: it could carry active
-    // content, so it may only be downloaded, never rendered (ADR-0009).
     const [previewUrl, downloadUrl] = await Promise.all([
-      previewable ? this.storage.createSignedUrl(storagePath) : Promise.resolve(null),
+      this.storage.createSignedUrl(storagePath),
       this.storage.createSignedUrl(storagePath, `${safeName}-${application.applicationReference}.${extension}`),
     ]);
-    return { previewUrl, downloadUrl, previewable, mimeType, expiresInSeconds: 60 };
+    return { previewUrl, downloadUrl, viewer, mimeType, expiresInSeconds: 60 };
   }
 }
 

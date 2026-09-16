@@ -68,6 +68,23 @@ export function Filters({ options }: { options: FilterOptions }) {
         </button>
       </form>
 
+      {/* The filter people reach for most, so it is never folded away. */}
+      <label className="mt-2 block">
+        <span className="sr-only">Filter by job</span>
+        <select
+          value={params.get("jobOpeningId") ?? ""}
+          onChange={(event) => apply({ jobOpeningId: event.target.value })}
+          className="field"
+        >
+          <option value="">All jobs</option>
+          {options.jobs.map((job) => (
+            <option key={job.id} value={job.id}>
+              {job.title} ({job.jobId})
+            </option>
+          ))}
+        </select>
+      </label>
+
       {/* On a phone six filter controls are a wall of form. They collapse behind
           a disclosure that says how many are active; from tablet up there is
           room to show them all and the disclosure is always open. */}
@@ -77,15 +94,7 @@ export function Filters({ options }: { options: FilterOptions }) {
           <ChevronDown size={15} strokeWidth={2.5} aria-hidden />
         </summary>
 
-        <div className="mt-2 grid grid-cols-2 gap-2 sm:mt-3 sm:grid-cols-3 lg:grid-cols-6">
-        <Select label="Job" value={params.get("jobOpeningId") ?? ""} onChange={(v) => apply({ jobOpeningId: v })}>
-          {options.jobs.map((job) => (
-            <option key={job.id} value={job.id}>
-              {job.jobId}
-            </option>
-          ))}
-        </Select>
-
+        <div className="mt-2 grid grid-cols-2 gap-2 sm:mt-3 sm:grid-cols-3 lg:grid-cols-5">
         <Select label="Profile" value={params.get("profileId") ?? ""} onChange={(v) => apply({ profileId: v })}>
           {options.profiles.map((p) => (
             <option key={p.id} value={p.id}>

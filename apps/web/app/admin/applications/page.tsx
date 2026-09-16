@@ -1,4 +1,5 @@
 import Link from "next/link";
+import { Suspense } from "react";
 import { apiGet } from "@/lib/server-api";
 import { SOURCE_LABEL, STATUS_STYLE, relativeTime, type ApplicationStatus } from "@/lib/status";
 import { Filters, type FilterOptions } from "./filters";
@@ -41,27 +42,42 @@ export default async function ApplicationsPage({
     if (typeof value === "string" && value !== "") query.set(key, value);
   }
 
-  const [data, jobs, profiles, recruiters] = await Promise.all([
-    apiGet<Page>(`/applications?${query}`),
+  const [jobs, profiles, recruiters] = await Promise.all([
     apiGet<{ items: { id: string; jobId: string; title: string }[] }>("/jobs?pageSize=100"),
     apiGet<{ id: string; name: string }[]>("/job-profiles"),
     apiGet<{ id: string; name: string }[]>("/recruiters").catch(() => []),
   ]);
 
   const options: FilterOptions = { jobs: jobs.items, profiles, recruiters };
-  const lastPage = Math.max(1, Math.ceil(data.total / data.pageSize));
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-6">
       <header className="mb-4">
         <h1 className="text-2xl font-extrabold">Applications</h1>
-        <p className="mt-1 text-sm text-mid">
-          <span className="tnum font-bold">{data.total}</span> matching
-        </p>
       </header>
 
       <Filters options={options} />
 
+      {/* Keyed by the filters: each change gets a fresh boundary, so the old
+          results give way to a skeleton at once. Without it a filter change in
+          Chrome could hang for good (see ./loading.tsx). */}
+      <Suspense key={query.toString()} fallback={<ResultsSkeleton />}>
+        <Results query={query.toString()} />
+      </Suspense>
+    </main>
+  );
+}
+
+async function Results({ query: queryString }: { query: string }) {
+  const query = new URLSearchParams(queryString);
+  const data = await apiGet<Page>(`/applications?${query}`);
+  const lastPage = Math.max(1, Math.ceil(data.total / data.pageSize));
+
+  return (
+    <>
+      <p className="mb-3 text-sm text-mid">
+        <span className="tnum font-bold">{data.total}</span> matching
+      </p>
       {data.items.length === 0 ? (
         <div className="card p-8 text-center">
           <h2 className="font-extrabold">No applications match</h2>
@@ -194,7 +210,18 @@ export default async function ApplicationsPage({
           )}
         </>
       )}
-    </main>
+    </>
+  );
+}
+
+function ResultsSkeleton() {
+  return (
+    <div aria-busy="true" aria-label="Loading applications" className="animate-pulse space-y-2.5">
+      <div className="h-4 w-24 rounded-[10px] bg-line" />
+      {[0, 1, 2, 3].map((i) => (
+        <div key={i} className="h-20 rounded-[14px] border-2 border-line bg-sand" />
+      ))}
+    </div>
   );
 }
 

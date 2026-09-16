@@ -9,12 +9,14 @@ let t: string;
 let alpha: Awaited<ReturnType<typeof seedApplication>>;
 let beta: Awaited<ReturnType<typeof seedApplication>>;
 let gamma: Awaited<ReturnType<typeof seedApplication>>;
+let wordCv: Awaited<ReturnType<typeof seedApplication>>;
 
 test.beforeAll(async ({}, info) => {
   t = tag(info);
   alpha = await seedApplication({ name: `Alpha ${t}`, note: "Can join <b>immediately</b>" });
   beta = await seedApplication({ name: `Beta ${t}`, status: "SCREENING" });
   gamma = await seedApplication({ name: `Gamma ${t}` });
+  wordCv = await seedApplication({ name: `Word ${t}`, word: true });
 });
 
 const card = (page: Page, name: string) => page.locator("article").filter({ hasText: name });
@@ -31,10 +33,10 @@ test("dashboard shows the numbers and the collecting job", async ({ page }, info
 test("combined board: search, job filter, move and undo", async ({ page }, info) => {
   await page.goto("/admin/board");
   await page.getByPlaceholder("Name, phone or reference").fill(t);
-  await expect(page.locator("article")).toHaveCount(3);
+  await expect(page.locator("article")).toHaveCount(4);
   await expect(card(page, alpha.candidate.name).getByText(run().job.jobId)).toBeVisible();
   await page.getByRole("combobox", { name: "Show one job" }).selectOption({ label: `${run().job.title} (${run().job.jobId})` });
-  await expect(page.locator("article")).toHaveCount(3);
+  await expect(page.locator("article")).toHaveCount(4);
   await expectCleanLayout(page, info, "combined-board");
 
   await card(page, alpha.candidate.name).getByRole("combobox").selectOption("SHORTLISTED");
@@ -158,14 +160,105 @@ test("jobs: list, new job defaults, clone, job page with QR and WhatsApp post", 
 
   await page.goto(`/admin/jobs/${job.id}`);
   await expect(page.getByRole("img", { name: /QR code/ })).toBeVisible();
-  const post = page.locator("pre");
-  await expect(post).toContainText("Hello everyone,");
-  await expect(post).toContainText("*Location:* Hyderabad (Hybrid)");
-  await expect(post).toContainText("Please share this post.");
+  const whatsappPost = page.getByLabel("WhatsApp post");
+  await expect(whatsappPost).toContainText("Hello everyone,");
+  await expect(whatsappPost).toContainText("*Location:* Hyderabad (Hybrid)");
+  await expect(whatsappPost).toContainText("source=whatsapp");
+  await expect(page.getByLabel("Telegram post")).toContainText("source=telegram");
+  await expect(page.getByRole("button", { name: "Copy link" })).toHaveCount(2);
   await expectCleanLayout(page, info, "job-detail");
 
   await page.goto(`/admin/jobs/${job.id}/edit`);
   await expectCleanLayout(page, info, "job-edit");
+});
+
+test("share post: edit the message, facts follow job edits, reset", async ({ page }, info) => {
+  // Its own job, so devices running in parallel never edit the same message.
+  const profiles = await (await page.request.get("/api/job-profiles")).json();
+  const created = await page.request.post("/api/jobs", {
+    data: { jobId: `E2E-POST-${t.toUpperCase()}`, title: `Post Role ${t}`, profileId: profiles[0].id, location: "Chennai", minExperience: 2, maxExperience: 5 },
+  });
+  expect(created.ok()).toBe(true);
+  const job = await created.json();
+  await page.request.put(`/api/jobs/${job.id}/status`, { data: { status: "ACTIVE" } });
+
+  await page.goto(`/admin/jobs/${job.id}`);
+  const whatsappPost = page.getByLabel("WhatsApp post");
+  await expect(whatsappPost).toContainText("*Location:* Chennai");
+  await page.getByRole("button", { name: "Edit message" }).click();
+  await page.fill("#share-template", "Now hiring *{title}* in {location}\n\nApply: {link}");
+  // The preview follows the typing, before anything is saved.
+  await expect(whatsappPost).toContainText(`Now hiring *Post Role ${t}* in Chennai`);
+  await expect(whatsappPost).toContainText(`/apply/${job.jobId}?source=whatsapp`);
+  await expect(page.getByLabel("Telegram post")).toContainText("source=telegram");
+  await expectCleanLayout(page, info, "share-edit");
+  await page.getByRole("button", { name: "Save message" }).click();
+  await expect(page.getByText("This job uses its own message.")).toBeVisible();
+
+  // Editing the job changes the saved message's facts without touching the wording.
+  await page.goto(`/admin/jobs/${job.id}/edit`);
+  await page.fill("input[name=location]", "Kochi");
+  await page.getByRole("button", { name: "Save changes" }).click();
+  await expect(page).toHaveURL(new RegExp(`/admin/jobs/${job.id}$`));
+  await expect(page.getByLabel("WhatsApp post")).toContainText(`Now hiring *Post Role ${t}* in Kochi`);
+
+  await page.getByRole("button", { name: "Edit message" }).click();
+  await page.getByRole("button", { name: "Use default" }).click();
+  await expect(page.getByText("Using the default message.")).toBeVisible();
+  await expect(page.getByLabel("WhatsApp post")).toContainText("Hello everyone,");
+});
+
+test("applications: job filter is always visible and filters", async ({ page }, info) => {
+  const { job } = run();
+  await page.goto("/admin/applications");
+  const jobFilter = page.getByRole("combobox", { name: "Filter by job" });
+  await expect(jobFilter).toBeVisible();
+  await jobFilter.selectOption({ label: `${job.title} (${job.jobId})` });
+  await expect(page).toHaveURL(new RegExp(`jobOpeningId=${job.id}`));
+  await expect(page.getByRole("link", { name: gamma.candidate.name, exact: true }).filter({ visible: true })).toBeVisible();
+  await expectCleanLayout(page, info, "applications-job-filter");
+});
+
+test("board card: notes and CV side panel", async ({ page }, info) => {
+  await page.goto(`/admin/jobs/${run().job.id}/board`);
+  await page.getByPlaceholder("Name, phone or reference").fill(t);
+  const alphaCard = card(page, alpha.candidate.name);
+  // Alpha has the candidate's own note and one team note from the earlier test.
+  const notesButton = alphaCard.getByRole("button", { name: /^Notes for / });
+  await expect(notesButton).toHaveAccessibleName(`Notes for ${alpha.candidate.name}, 2`);
+  await notesButton.click();
+
+  const panel = page.getByRole("dialog");
+  await expect(panel.getByRole("heading", { name: alpha.candidate.name })).toBeVisible();
+  await expect(panel.getByText("Can join <b>immediately</b>")).toBeVisible();
+  await expect(panel.getByText(`Called ${t}`)).toBeVisible();
+  await expectCleanLayout(page, info, "board-notes-panel");
+  await panel.locator("#note").fill(`Panel note ${t}`);
+  await panel.getByRole("button", { name: "Add note" }).click();
+  await expect(panel.getByText(`Panel note ${t}`)).toBeVisible();
+
+  await panel.getByRole("tab", { name: "CV" }).click();
+  await expect(panel.locator("iframe[title^='CV:']").or(panel.getByRole("link", { name: "Open CV" }))).toBeVisible();
+  await expectCleanLayout(page, info, "board-cv-panel");
+  await panel.getByRole("button", { name: "Close" }).click();
+  await expect(panel).toBeHidden();
+  await expect(notesButton).toHaveAccessibleName(`Notes for ${alpha.candidate.name}, 3`);
+});
+
+test("Word CV previews through Microsoft's viewer; PDF preview can go full screen", async ({ page }, info) => {
+  await page.goto(`/admin/applications/${wordCv.id}`);
+  const frame = page.locator("iframe[title^='CV:']");
+  await expect(frame).toHaveAttribute("src", /^https:\/\/view\.officeapps\.live\.com\/op\/embed\.aspx\?src=https%3A%2F%2F/);
+  expect(decodeURIComponent((await frame.getAttribute("src"))!.split("src=")[1])).toContain(".docx?token=");
+
+  await page.goto(`/admin/applications/${gamma.id}`);
+  await page.getByRole("button", { name: "Full screen" }).click();
+  const box = await page.getByRole("region", { name: /^CV:/ }).boundingBox();
+  const viewport = page.viewportSize()!;
+  expect(box!.width).toBeGreaterThanOrEqual(viewport.width - 1);
+  expect(box!.height).toBeGreaterThanOrEqual(viewport.height - 1);
+  await expectCleanLayout(page, info, "cv-full-screen");
+  await page.getByRole("button", { name: "Exit full screen" }).click();
 });
 
 test("users page", async ({ page }, info) => {

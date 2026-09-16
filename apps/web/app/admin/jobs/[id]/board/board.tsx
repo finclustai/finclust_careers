@@ -16,7 +16,8 @@ import {
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
-import { AlertCircle, CheckSquare, GripVertical, Mail, Phone, Search, Undo2, X } from "lucide-react";
+import { AlertCircle, CheckSquare, FileText, GripVertical, Mail, NotebookPen, Phone, Search, Undo2, X } from "lucide-react";
+import { CardPanel, type PanelTab } from "./card-panel";
 import { ShareDialog } from "@/components/share-dialog";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 import {
@@ -40,14 +41,19 @@ export interface Card {
     phone: string;
     location: string | null;
     totalExperience: string | number | null;
+    _count: { notes: number };
   };
   assignedRecruiter: { id: string; name: string } | null;
   jobOpening: { id: string; jobId: string; title: string };
+  resume: { id: string; originalFileName: string; fileSize: number } | null;
+  candidateNote: string | null;
 }
 
 // Which cards are ticked for sharing. A context, so the columns and cards in
 // between do not each pass it along.
 const Selection = createContext<{ selected: Set<string>; toggle: (id: string) => void } | null>(null);
+// Opens a card's notes or CV in the side panel.
+const OpenPanel = createContext<(card: Card, tab: PanelTab) => void>(() => {});
 
 /**
  * One job's board, or with `combined` every job's on one board (ADR-0010). The
@@ -71,6 +77,9 @@ export function Board({
   const [selecting, setSelecting] = useState(false);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [sharing, setSharing] = useState(false);
+  const [panel, setPanel] = useState<{ id: string; tab: PanelTab } | null>(null);
+  const panelCard = panel ? cards.find((c) => c.id === panel.id) : undefined;
+  const openPanel = useMemo(() => (card: Card, tab: PanelTab) => setPanel({ id: card.id, tab }), []);
 
   const selection = useMemo(
     () =>
@@ -283,6 +292,26 @@ export function Board({
         </p>
       )}
 
+      {panel && panelCard && (
+        <CardPanel
+          card={panelCard}
+          tab={panel.tab}
+          onTab={(tab) => setPanel({ id: panelCard.id, tab })}
+          onClose={() => setPanel(null)}
+          // Notes belong to the person, so every card of theirs shows the new count.
+          onNoteAdded={() =>
+            setCards((all) =>
+              all.map((c) =>
+                c.candidate.id === panelCard.candidate.id
+                  ? { ...c, candidate: { ...c.candidate, _count: { notes: c.candidate._count.notes + 1 } } }
+                  : c,
+              ),
+            )
+          }
+        />
+      )}
+
+      <OpenPanel.Provider value={openPanel}>
       <Selection.Provider value={selection}>
       <DndContext
         sensors={sensors}
@@ -315,6 +344,7 @@ export function Board({
         </DragOverlay>
       </DndContext>
       </Selection.Provider>
+      </OpenPanel.Provider>
       {/* Room to scroll the last cards out from under the selection bar. */}
       {selecting && <div className="h-20" aria-hidden />}
     </>
@@ -428,6 +458,8 @@ function CardFace({
 }) {
   const router = useRouter();
   const selection = useContext(Selection);
+  const openPanel = useContext(OpenPanel);
+  const noteCount = card.candidate._count.notes + (card.candidateNote ? 1 : 0);
   // Every stage but the current one (ADR-0008).
   const destinations = APPLICATION_STATUSES.filter((s) => canTransition(card.status, s));
   const experience = card.candidate.totalExperience;
@@ -509,6 +541,44 @@ function CardFace({
       <p className="mt-1 text-xs text-mid">
         {SOURCE_LABEL[card.source] ?? card.source} · {relativeTime(card.appliedAt)}
       </p>
+
+      {onMove && (
+        <div className="mt-2 flex gap-1.5">
+          <button
+            type="button"
+            onClick={(event) => {
+              event.stopPropagation();
+              openPanel(card, "notes");
+            }}
+            aria-label={`Notes for ${card.candidate.name}${noteCount ? `, ${noteCount}` : ", none yet"}`}
+            title="Notes"
+            className="relative inline-flex size-11 items-center justify-center rounded-[8px] border-2 border-ink bg-paper md:size-9"
+          >
+            <NotebookPen size={15} strokeWidth={2.5} aria-hidden />
+            {noteCount > 0 && (
+              <span
+                aria-hidden
+                className="tnum absolute -right-2 -top-2 flex h-5 min-w-5 items-center justify-center rounded-full border-2 border-ink bg-orange px-1 text-[11px] font-extrabold leading-none"
+              >
+                {noteCount}
+              </span>
+            )}
+          </button>
+          <button
+            type="button"
+            disabled={!card.resume}
+            onClick={(event) => {
+              event.stopPropagation();
+              openPanel(card, "cv");
+            }}
+            aria-label={card.resume ? `CV of ${card.candidate.name}` : "No CV"}
+            title={card.resume ? "CV" : "No CV"}
+            className="inline-flex size-11 items-center justify-center rounded-[8px] border-2 border-ink bg-paper disabled:opacity-40 md:size-9"
+          >
+            <FileText size={15} strokeWidth={2.5} aria-hidden />
+          </button>
+        </div>
+      )}
 
       {onMove && (
         <label className="mt-2.5 block">

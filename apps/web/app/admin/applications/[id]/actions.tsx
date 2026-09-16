@@ -149,7 +149,16 @@ interface Note {
   author: { name: string };
 }
 
-export function Notes({ applicationId, initial }: { applicationId: string; initial: Note[] }) {
+export function Notes({
+  applicationId,
+  initial,
+  onAdded,
+}: {
+  applicationId: string;
+  initial: Note[];
+  /** Lets the board bump its note count without reloading. */
+  onAdded?: () => void;
+}) {
   const [notes, setNotes] = useState(initial);
   const [body, setBody] = useState("");
   const [busy, setBusy] = useState(false);
@@ -164,6 +173,7 @@ export function Notes({ applicationId, initial }: { applicationId: string; initi
       const note = await send<Note>("POST", `/applications/${applicationId}/notes`, { body });
       setNotes((all) => [note, ...all]);
       setBody("");
+      onAdded?.();
     } catch (caught) {
       setError(errorText(caught));
     } finally {

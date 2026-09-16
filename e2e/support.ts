@@ -76,11 +76,14 @@ export async function seedApplication(opts: {
   status?: "NEW" | "SCREENING" | "SHORTLISTED" | "REJECTED";
   assignTo?: string;
   note?: string;
+  word?: boolean;
 }) {
   const { job } = run();
-  const path = `${job.jobId}/${randomUUID()}.pdf`;
-  const pdf = readFileSync(join(FIXTURES, "cv.pdf"));
-  const { error } = await storage().upload(path, pdf, { contentType: "application/pdf" });
+  const ext = opts.word ? "docx" : "pdf";
+  const mimeType = opts.word ? "application/vnd.openxmlformats-officedocument.wordprocessingml.document" : "application/pdf";
+  const path = `${job.jobId}/${randomUUID()}.${ext}`;
+  const pdf = readFileSync(join(FIXTURES, `cv.${ext}`));
+  const { error } = await storage().upload(path, pdf, { contentType: mimeType });
   if (error) throw new Error(`seed upload failed: ${error.message}`);
 
   const phone = `+919${String(Math.floor(Math.random() * 1e9)).padStart(9, "0")}`;
@@ -102,7 +105,7 @@ export async function seedApplication(opts: {
       assignedRecruiterId: opts.assignTo,
       candidateNote: opts.note,
       resume: {
-        create: { candidateId: candidate.id, originalFileName: "cv.pdf", fileSize: pdf.length, storagePath: path },
+        create: { candidateId: candidate.id, originalFileName: `cv.${ext}`, fileSize: pdf.length, storagePath: path, mimeType },
       },
     },
     include: { candidate: true },

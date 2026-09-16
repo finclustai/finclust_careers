@@ -18,14 +18,17 @@ interface JobDetail {
   maxExperience: number | null;
   requiredSkills: string[];
   description: string | null;
+  workMode: "ONSITE" | "HYBRID" | "REMOTE" | null;
+  employmentType: "FULL_TIME" | "CONTRACT" | "INTERNSHIP" | null;
+  openings: number;
   candidateNoteEnabled: boolean;
   closesAt: string | null;
   profile: { name: string };
   _count: { applications: number };
   share: {
     links: { source: string; url: string; clickCount: number }[];
-    whatsappMessage: string;
-    whatsappShareUrl: string;
+    template: string;
+    customTemplate: boolean;
   };
 }
 
@@ -76,7 +79,9 @@ export default async function JobPage({ params }: { params: Promise<{ id: string
         />
       )}
 
-      {job.status === "ACTIVE" && <ShareKit share={job.share} />}
+      {job.status === "ACTIVE" && (
+        <ShareKit jobUuid={job.id} job={job} share={job.share} canEdit={user.role === "ADMIN"} />
+      )}
 
       {job.status === "ACTIVE" && qr && (
         <section className="card mt-4 flex flex-wrap items-center gap-4 p-4">

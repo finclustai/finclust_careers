@@ -36,7 +36,9 @@ const SECTIONS: { heading: string; body: React.ReactNode }[] = [
     body: (
       <>
         Only FINCLUST's recruitment team, through a signed-in console. Your CV is stored privately and is
-        never publicly accessible; recruiters open it through links that expire within a minute.
+        never publicly accessible; recruiters open it through links that expire within a minute. If you send
+        a Word CV, it is displayed to the team using Microsoft&apos;s online document viewer, which reads the
+        file through that short-lived link and does not keep it.
       </>
     ),
   },
