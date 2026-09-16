@@ -18,6 +18,7 @@ import { useRouter } from "next/navigation";
 import { createContext, useContext, useEffect, useMemo, useState } from "react";
 import { AlertCircle, CheckSquare, FileText, GripVertical, Mail, NotebookPen, Phone, Search, Undo2, X } from "lucide-react";
 import { CardPanel, type PanelTab } from "./card-panel";
+import type { Viewer } from "@/app/admin/applications/[id]/actions";
 import { ShareDialog } from "@/components/share-dialog";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 import {
@@ -62,10 +63,12 @@ export function Board({
   initialCards,
   columnPageSize,
   combined = false,
+  me,
 }: {
   initialCards: Card[];
   columnPageSize: number;
   combined?: boolean;
+  me: Viewer;
 }) {
   const [cards, setCards] = useState(initialCards);
   const [dragging, setDragging] = useState<Card | null>(null);
@@ -79,6 +82,12 @@ export function Board({
   const [panel, setPanel] = useState<{ id: string; tab: PanelTab } | null>(null);
   const panelCard = panel ? cards.find((c) => c.id === panel.id) : undefined;
   const openPanel = useMemo(() => (card: Card, tab: PanelTab) => setPanel({ id: card.id, tab }), []);
+  const bumpNotes = (candidateId: string, by: number) =>
+    setCards((all) =>
+      all.map((c) =>
+        c.candidate.id === candidateId ? { ...c, candidate: { ...c.candidate, _count: { notes: c.candidate._count.notes + by } } } : c,
+      ),
+    );
 
   const selection = useMemo(
     () =>
@@ -297,16 +306,10 @@ export function Board({
           tab={panel.tab}
           onTab={(tab) => setPanel({ id: panelCard.id, tab })}
           onClose={() => setPanel(null)}
+          me={me}
           // Notes belong to the person, so every card of theirs shows the new count.
-          onNoteAdded={() =>
-            setCards((all) =>
-              all.map((c) =>
-                c.candidate.id === panelCard.candidate.id
-                  ? { ...c, candidate: { ...c.candidate, _count: { notes: c.candidate._count.notes + 1 } } }
-                  : c,
-              ),
-            )
-          }
+          onNoteAdded={() => bumpNotes(panelCard.candidate.id, 1)}
+          onNoteDeleted={() => bumpNotes(panelCard.candidate.id, -1)}
         />
       )}
 

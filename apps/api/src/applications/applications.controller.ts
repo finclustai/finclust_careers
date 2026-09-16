@@ -1,4 +1,4 @@
-import { Body, Controller, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query } from "@nestjs/common";
+import { Body, Controller, Delete, Get, HttpCode, Param, ParseUUIDPipe, Post, Put, Query } from "@nestjs/common";
 import { ApplicationsService } from "./applications.service.js";
 import { AssignDto, ChangeStatusDto, ListApplicationsQueryDto, NoteDto } from "./dto.js";
 import { CurrentUser, Roles, type SessionUser } from "../auth/index.js";
@@ -68,6 +68,26 @@ export class ApplicationsController {
     @CurrentUser() user: SessionUser,
   ) {
     return this.applications.addNote(id, dto, user);
+  }
+
+  @Put("applications/:id/notes/:noteId")
+  editNote(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("noteId", ParseUUIDPipe) noteId: string,
+    @Body() dto: NoteDto,
+    @CurrentUser() user: SessionUser,
+  ) {
+    return this.applications.editNote(id, noteId, dto, user);
+  }
+
+  @Delete("applications/:id/notes/:noteId")
+  @HttpCode(204)
+  deleteNote(
+    @Param("id", ParseUUIDPipe) id: string,
+    @Param("noteId", ParseUUIDPipe) noteId: string,
+    @CurrentUser() user: SessionUser,
+  ) {
+    return this.applications.deleteNote(id, noteId, user);
   }
 
   @Get("applications/:id/resume-url")

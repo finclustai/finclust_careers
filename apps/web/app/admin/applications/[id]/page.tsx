@@ -2,7 +2,7 @@ import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
 import { apiGet, getSession } from "@/lib/server-api";
 import { SOURCE_LABEL, STATUS_STYLE, type ApplicationStatus } from "@/lib/status";
-import { AssignControl, DeleteCandidate, Notes, StatusControl, StepNav } from "./actions";
+import { AssignControl, DeleteCandidate, Notes, StatusControl, StepNav, type Note } from "./actions";
 import { ResumePreview } from "./resume-preview";
 import { WhatsAppButton } from "@/components/whatsapp-button";
 import { ShareButton } from "@/components/share-button";
@@ -39,7 +39,7 @@ interface Detail {
     expectedSalary: string | null;
     linkedinUrl: string | null;
     whatsappOptIn: boolean;
-    notes: { id: string; body: string; createdAt: string; author: { name: string } }[];
+    notes: Note[];
   };
   jobOpening: { id: string; jobId: string; title: string; client: string | null };
   assignedRecruiter: { id: string; name: string } | null;
@@ -199,7 +199,7 @@ export default async function ApplicationPage({ params }: { params: Promise<{ id
             </section>
           )}
 
-          <Notes applicationId={app.id} initial={app.candidate.notes} />
+          <Notes applicationId={app.id} initial={app.candidate.notes} me={{ id: user.id, role: user.role }} />
 
           <section className="card p-4">
             <h2 className="text-sm font-extrabold">History</h2>

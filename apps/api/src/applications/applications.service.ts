@@ -1,5 +1,5 @@
-import { BadRequestException, Injectable, NotFoundException } from "@nestjs/common";
-import { canTransition, dailyCounts, isPreviewable, type ApplicationStatus } from "@finclust/domain";
+import { BadRequestException, ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { canChangeNote, canTransition, dailyCounts, isPreviewable, type ApplicationStatus } from "@finclust/domain";
 import { Prisma } from "@finclust/db";
 import { PrismaService } from "../prisma/prisma.service.js";
 import { StorageService } from "../storage/storage.service.js";
@@ -22,6 +22,15 @@ const CARD_FIELDS = {
   jobOpening: { select: { id: true, jobId: true, title: true } },
   resume: { select: { id: true, originalFileName: true, fileSize: true } },
 } satisfies Prisma.ApplicationSelect;
+
+const NOTE_FIELDS = {
+  id: true,
+  body: true,
+  createdAt: true,
+  editedAt: true,
+  author: { select: { id: true, name: true } },
+  editedBy: { select: { name: true } },
+} satisfies Prisma.CandidateNoteSelect;
 
 // Columns page rather than load everything: one vacancy can hold hundreds.
 const COLUMN_PAGE_SIZE = 50;
@@ -147,10 +156,7 @@ export class ApplicationsService {
       include: {
         candidate: {
           include: {
-            notes: {
-              orderBy: { createdAt: "desc" },
-              select: { id: true, body: true, createdAt: true, author: { select: { name: true } } },
-            },
+            notes: { orderBy: { createdAt: "desc" }, select: NOTE_FIELDS },
           },
         },
         jobOpening: { select: { id: true, jobId: true, title: true, client: true } },
@@ -209,8 +215,40 @@ export class ApplicationsService {
     if (!application) throw new NotFoundException("That application does not exist.");
     return this.prisma.client.candidateNote.create({
       data: { candidateId: application.candidateId, authorId: user.id, body: dto.body.trim() },
-      select: { id: true, body: true, createdAt: true, author: { select: { name: true } } },
+      select: NOTE_FIELDS,
     });
+  }
+
+  async editNote(applicationId: string, noteId: string, dto: NoteDto, user: SessionUser) {
+    await this.visibleNote(applicationId, noteId, user, "edit");
+    return this.prisma.client.candidateNote.update({
+      where: { id: noteId },
+      data: { body: dto.body.trim(), editedAt: new Date(), editedById: user.id },
+      select: NOTE_FIELDS,
+    });
+  }
+
+  async deleteNote(applicationId: string, noteId: string, user: SessionUser) {
+    await this.visibleNote(applicationId, noteId, user, "delete");
+    await this.prisma.client.candidateNote.delete({ where: { id: noteId } });
+  }
+
+  /** The note, if this user can see its candidate and may do this to it. */
+  private async visibleNote(applicationId: string, noteId: string, user: SessionUser, action: "edit" | "delete") {
+    const application = await this.prisma.client.application.findFirst({
+      where: { ...this.scope(user), id: applicationId },
+      select: { candidateId: true },
+    });
+    const note = application
+      ? await this.prisma.client.candidateNote.findFirst({
+          where: { id: noteId, candidateId: application.candidateId },
+          select: { authorId: true },
+        })
+      : null;
+    if (!note) throw new NotFoundException("That note does not exist.");
+    if (!canChangeNote(user, note, action)) {
+      throw new ForbiddenException("Only the person who wrote this note or an admin can delete it.");
+    }
   }
 
   async assign(applicationId: string, dto: AssignDto, user: SessionUser) {

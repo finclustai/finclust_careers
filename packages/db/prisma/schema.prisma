@@ -85,7 +85,8 @@ model User {
   createdJobOpenings   JobOpening[]               @relation("JobOpeningCreatedBy")
   assignedApplications Application[]              @relation("ApplicationRecruiter")
   statusChanges        ApplicationStatusHistory[]
-  notes                CandidateNote[]
+  notes                CandidateNote[]            @relation("NoteAuthor")
+  editedNotes          CandidateNote[]            @relation("NoteEditor")
   cvShares             CvShare[]
 
   // Drives the "new since your last visit" badges.
@@ -275,9 +276,13 @@ model CandidateNote {
   authorId    String   @map("author_id") @db.Uuid
   body        String
   createdAt   DateTime @default(now()) @map("created_at")
+  // Anyone on the team may edit a note; the latest edit is shown with it.
+  editedAt    DateTime? @map("edited_at")
+  editedById  String?   @map("edited_by") @db.Uuid
 
   candidate Candidate @relation(fields: [candidateId], references: [id], onDelete: Cascade)
-  author    User      @relation(fields: [authorId], references: [id])
+  author    User      @relation("NoteAuthor", fields: [authorId], references: [id])
+  editedBy  User?     @relation("NoteEditor", fields: [editedById], references: [id], onDelete: SetNull)
 
   @@index([candidateId, createdAt])
   @@map("candidate_notes")

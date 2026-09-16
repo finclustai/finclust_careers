@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { ArrowLeft } from "lucide-react";
-import { apiGet } from "@/lib/server-api";
+import { apiGet, getSession } from "@/lib/server-api";
 import { Board, type Card } from "./board";
 
 export const dynamic = "force-dynamic";
@@ -14,7 +14,7 @@ interface BoardData {
 
 export default async function BoardPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const data = await apiGet<BoardData>(`/applications/board/${id}`);
+  const [data, user] = await Promise.all([apiGet<BoardData>(`/applications/board/${id}`), getSession()]);
   const total = Object.values(data.counts).reduce((sum, n) => sum + n, 0);
 
   return (
@@ -49,6 +49,7 @@ export default async function BoardPage({ params }: { params: Promise<{ id: stri
         <Board
           initialCards={data.cards}
           columnPageSize={data.columnPageSize}
+          me={{ id: user.id, role: user.role }}
         />
         </>
       )}

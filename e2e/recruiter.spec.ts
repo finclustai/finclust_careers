@@ -1,4 +1,4 @@
-import { RECRUITER_STATE, expectCleanLayout, run, seedApplication, tag, expect, test } from "./support";
+import { RECRUITER_STATE, expectCleanLayout, prisma, run, seedApplication, tag, expect, test } from "./support";
 
 test.use({ storageState: RECRUITER_STATE });
 test.describe.configure({ mode: "serial" });
@@ -11,6 +11,28 @@ test.beforeAll(async ({}, info) => {
   t = tag(info);
   mine = await seedApplication({ name: `Mine ${t}`, assignTo: run().recruiter.id });
   theirs = await seedApplication({ name: `Theirs ${t}` });
+});
+
+test("a recruiter can edit a colleague's note but not delete it", async ({ page }) => {
+  const admin = await prisma.user.findUniqueOrThrow({ where: { email: process.env.SEED_ADMIN_EMAIL! } });
+  const note = await prisma.candidateNote.create({
+    data: { candidateId: mine.candidateId, authorId: admin.id, body: `Admin note ${t}` },
+  });
+
+  await page.goto(`/admin/applications/${mine.id}`);
+  const item = page.locator("li").filter({ hasText: `Admin note ${t}` });
+  await expect(item.getByRole("button", { name: "Edit" })).toBeVisible();
+  await expect(item.getByRole("button", { name: "Delete" })).toHaveCount(0);
+
+  await item.getByRole("button", { name: "Edit" }).click();
+  await item.getByRole("textbox", { name: "Edit note" }).fill(`Admin note ${t}, checked`);
+  await item.getByRole("button", { name: "Save" }).click();
+  await expect(item).toContainText(`edited by ${run().recruiter.name}`);
+
+  const path = `/api/applications/${mine.id}/notes/${note.id}`;
+  expect((await page.request.delete(path)).status()).toBe(403);
+  // A note on a candidate the recruiter cannot see does not exist for them.
+  expect((await page.request.put(`/api/applications/${theirs.id}/notes/${note.id}`, { data: { body: "x" } })).status()).toBe(404);
 });
 
 test("a recruiter sees only what is assigned to them", async ({ page }, info) => {

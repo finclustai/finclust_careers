@@ -1,8 +1,8 @@
 "use client";
 
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useRef, useState, useTransition } from "react";
-import { Loader2, Search, SlidersHorizontal, X } from "lucide-react";
+import { usePathname, useSearchParams } from "next/navigation";
+import { useRef, useState } from "react";
+import { Search, SlidersHorizontal, X } from "lucide-react";
 import { APPLICATION_SOURCES, APPLICATION_STATUSES, SOURCE_LABEL, STATUS_STYLE } from "@/lib/status";
 
 export interface FilterOptions {
@@ -19,10 +19,8 @@ const MORE = ["profileId", "status", "source", "appliedFrom", "appliedTo"] as co
  * filtered view can be bookmarked or sent to a colleague.
  */
 export function Filters({ options }: { options: FilterOptions }) {
-  const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
-  const [pending, startTransition] = useTransition();
   const [search, setSearch] = useState(params.get("search") ?? "");
   const moreActive = MORE.filter((key) => params.get(key)).length;
   const [showMore, setShowMore] = useState(moreActive > 0);
@@ -36,7 +34,8 @@ export function Filters({ options }: { options: FilterOptions }) {
     }
     // Back to page one: page 7 of a result set that now has two pages is empty.
     next.delete("page");
-    startTransition(() => router.push(`${pathname}?${next}`));
+    // The browser's history API, not a Next.js navigation (see ./results.tsx).
+    window.history.pushState(null, "", `${pathname}?${next}`);
   }
 
   // Results follow the typing, a moment after it pauses.
@@ -64,11 +63,8 @@ export function Filters({ options }: { options: FilterOptions }) {
               apply({ search: search.trim() });
             }}
             placeholder="Name, phone, email or reference"
-            className="field !min-h-[44px] !pl-9 !pr-9"
+            className="field !min-h-[44px] !pl-9"
           />
-          {pending && (
-            <Loader2 size={16} strokeWidth={2.5} aria-hidden className="absolute right-3 top-1/2 -translate-y-1/2 animate-spin text-mid" />
-          )}
         </label>
 
         <label className="min-w-0 flex-1 basis-48 sm:max-w-xs">
@@ -133,7 +129,7 @@ export function Filters({ options }: { options: FilterOptions }) {
           onClick={() => {
             clearTimeout(typing.current);
             setSearch("");
-            startTransition(() => router.push(pathname));
+            window.history.pushState(null, "", pathname);
           }}
           className="text-link mt-1 text-mid"
         >

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { AlertCircle, ExternalLink, FileText, Loader2, NotebookPen, X } from "lucide-react";
-import { Notes } from "@/app/admin/applications/[id]/actions";
+import { Notes, type Note, type Viewer } from "@/app/admin/applications/[id]/actions";
 import { ResumePreview } from "@/app/admin/applications/[id]/resume-preview";
 import { errorText, send } from "@/lib/client-api";
 import type { Card } from "./board";
@@ -12,7 +12,7 @@ export type PanelTab = "notes" | "cv";
 
 interface Detail {
   candidateNote: string | null;
-  candidate: { notes: { id: string; body: string; createdAt: string; author: { name: string } }[] };
+  candidate: { notes: Note[] };
 }
 
 /**
@@ -26,8 +26,12 @@ export function CardPanel({
   onTab,
   onClose,
   onNoteAdded,
+  onNoteDeleted,
+  me,
 }: {
   card: Card;
+  me: Viewer;
+  onNoteDeleted: () => void;
   tab: PanelTab;
   onTab: (tab: PanelTab) => void;
   onClose: () => void;
@@ -130,7 +134,7 @@ export function CardPanel({
                 </blockquote>
               </section>
             )}
-            {detail && <Notes applicationId={card.id} initial={detail.candidate.notes} onAdded={onNoteAdded} />}
+            {detail && <Notes applicationId={card.id} initial={detail.candidate.notes} me={me} onAdded={onNoteAdded} onDeleted={onNoteDeleted} />}
           </div>
         )}
       </div>

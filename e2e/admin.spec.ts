@@ -115,6 +115,12 @@ test("application page: note, share history, team notes, reason on reject", asyn
   await page.fill("#note", `Called ${t}`);
   await page.getByRole("button", { name: "Add note" }).click();
   await expect(page.getByText(`Called ${t}`)).toBeVisible();
+  const note = page.locator("li").filter({ hasText: `Called ${t}` });
+  await note.getByRole("button", { name: "Edit" }).click();
+  await note.getByRole("textbox", { name: "Edit note" }).fill(`Called ${t}, joins in 30 days`);
+  await note.getByRole("button", { name: "Save" }).click();
+  await expect(note).toContainText(`Called ${t}, joins in 30 days`);
+  await expect(note).toContainText("edited by FINCLUST Admin");
 
   await page.getByRole("button", { name: "Rejected", exact: true }).click();
   await expect(page.locator("#reason")).toBeVisible();
@@ -240,6 +246,11 @@ test("applications: job filter is always visible and filters", async ({ page }, 
   await expectCleanLayout(page, info, "applications-job-filter");
   await page.getByRole("button", { name: "Clear filters" }).click();
   await expect(page).toHaveURL(/\/admin\/applications$/);
+
+  // Filters live in the address bar, so Back restores them.
+  await page.goBack();
+  await expect(page).toHaveURL(/status=ON_HOLD/);
+  await expect(page.getByRole("button", { name: "More filters (1)" })).toBeVisible();
 });
 
 test("board card: notes and CV side panel", async ({ page }, info) => {
@@ -260,13 +271,17 @@ test("board card: notes and CV side panel", async ({ page }, info) => {
   await panel.locator("#note").fill(`Panel note ${t}`);
   await panel.getByRole("button", { name: "Add note" }).click();
   await expect(panel.getByText(`Panel note ${t}`)).toBeVisible();
+  await expect(notesButton).toHaveAccessibleName(`Notes for ${alpha.candidate.name}, 2`);
+  page.once("dialog", (d) => d.accept());
+  await panel.locator("li").filter({ hasText: `Panel note ${t}` }).getByRole("button", { name: "Delete" }).click();
+  await expect(panel.getByText(`Panel note ${t}`)).toBeHidden();
 
   await panel.getByRole("tab", { name: "CV" }).click();
   await expect(panel.locator("iframe[title^='CV:']").or(panel.getByRole("link", { name: "Open CV" }))).toBeVisible();
   await expectCleanLayout(page, info, "board-cv-panel");
   await panel.getByRole("button", { name: "Close" }).click();
   await expect(panel).toBeHidden();
-  await expect(notesButton).toHaveAccessibleName(`Notes for ${alpha.candidate.name}, 2`);
+  await expect(notesButton).toHaveAccessibleName(`Notes for ${alpha.candidate.name}, 1`);
   await expect(alphaCard.getByRole("link", { name: /on WhatsApp$/ })).toBeVisible();
 });
 

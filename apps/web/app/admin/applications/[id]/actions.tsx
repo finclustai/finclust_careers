@@ -3,7 +3,8 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
-import { AlertCircle, ChevronLeft, ChevronRight, Loader2, Trash2 } from "lucide-react";
+import { AlertCircle, Check, ChevronLeft, ChevronRight, Loader2, Pencil, Trash2 } from "lucide-react";
+import { canChangeNote } from "@finclust/domain";
 import { errorText, send } from "@/lib/client-api";
 import { APPLICATION_STATUSES, STATUS_STYLE, canTransition, type ApplicationStatus } from "@/lib/status";
 
@@ -142,22 +143,35 @@ export function StepNav({ previousId, nextId }: { previousId: string | null; nex
   );
 }
 
-interface Note {
+export interface Note {
   id: string;
   body: string;
   createdAt: string;
-  author: { name: string };
+  editedAt: string | null;
+  author: { id: string; name: string };
+  editedBy: { name: string } | null;
 }
+
+export interface Viewer {
+  id: string;
+  role: "ADMIN" | "RECRUITER";
+}
+
+const when = (iso: string) => new Date(iso).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" });
 
 export function Notes({
   applicationId,
   initial,
+  me,
   onAdded,
+  onDeleted,
 }: {
   applicationId: string;
   initial: Note[];
-  /** Lets the board bump its note count without reloading. */
+  me: Viewer;
+  /** Let the board keep its note count in step without reloading. */
   onAdded?: () => void;
+  onDeleted?: () => void;
 }) {
   const [notes, setNotes] = useState(initial);
   const [body, setBody] = useState("");
@@ -207,17 +221,121 @@ export function Notes({
       {notes.length > 0 && (
         <ol className="mt-3 space-y-2.5">
           {notes.map((note) => (
-            <li key={note.id} className="rounded-[10px] border-2 border-line bg-shell p-2.5">
-              <p className="whitespace-pre-line break-words text-sm">{note.body}</p>
-              <p className="mt-1 text-xs text-mid">
-                {note.author.name} ·{" "}
-                {new Date(note.createdAt).toLocaleString("en-IN", { dateStyle: "medium", timeStyle: "short" })}
-              </p>
-            </li>
+            <NoteItem
+              key={note.id}
+              applicationId={applicationId}
+              note={note}
+              me={me}
+              onSaved={(saved) => setNotes((all) => all.map((n) => (n.id === saved.id ? saved : n)))}
+              onDeleted={() => {
+                setNotes((all) => all.filter((n) => n.id !== note.id));
+                onDeleted?.();
+              }}
+            />
           ))}
         </ol>
       )}
     </section>
+  );
+}
+
+function NoteItem({
+  applicationId,
+  note,
+  me,
+  onSaved,
+  onDeleted,
+}: {
+  applicationId: string;
+  note: Note;
+  me: Viewer;
+  onSaved: (note: Note) => void;
+  onDeleted: () => void;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const path = `/applications/${applicationId}/notes/${note.id}`;
+
+  async function save() {
+    if (!draft?.trim()) return;
+    setBusy(true);
+    setError(null);
+    try {
+      onSaved(await send<Note>("PUT", path, { body: draft }));
+      setDraft(null);
+    } catch (caught) {
+      setError(errorText(caught));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function remove() {
+    if (!confirm("Delete this note? This cannot be undone.")) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await send("DELETE", path);
+      onDeleted();
+    } catch (caught) {
+      setError(errorText(caught));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <li className="rounded-[10px] border-2 border-line bg-shell p-2.5">
+      {draft === null ? (
+        <p className="whitespace-pre-line break-words text-sm">{note.body}</p>
+      ) : (
+        <>
+          <label htmlFor={`edit-${note.id}`} className="sr-only">
+            Edit note
+          </label>
+          <textarea
+            id={`edit-${note.id}`}
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            maxLength={4000}
+            rows={3}
+            autoFocus
+            className="field"
+          />
+        </>
+      )}
+      <p className="mt-1 text-xs text-mid">
+        {note.author.name} · {when(note.createdAt)}
+        {note.editedAt && ` · edited${note.editedBy ? ` by ${note.editedBy.name}` : ""} ${when(note.editedAt)}`}
+      </p>
+      <ErrorLine message={error} />
+      <div className="mt-1 flex flex-wrap gap-x-3">
+        {draft === null ? (
+          <>
+            <button type="button" disabled={busy} onClick={() => setDraft(note.body)} className="text-link text-mid">
+              <Pencil size={13} strokeWidth={2.5} aria-hidden />
+              Edit
+            </button>
+            {canChangeNote(me, { authorId: note.author.id }, "delete") && (
+              <button type="button" disabled={busy} onClick={remove} className="text-link text-[#c11a12]">
+                <Trash2 size={13} strokeWidth={2.5} aria-hidden />
+                Delete
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <button type="button" disabled={busy || !draft.trim()} onClick={save} className="text-link">
+              {busy ? <Loader2 size={13} strokeWidth={2.5} aria-hidden className="animate-spin" /> : <Check size={13} strokeWidth={2.5} aria-hidden />}
+              Save
+            </button>
+            <button type="button" disabled={busy} onClick={() => setDraft(null)} className="text-link text-mid">
+              Cancel
+            </button>
+          </>
+        )}
+      </div>
+    </li>
   );
 }
 

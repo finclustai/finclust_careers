@@ -1,5 +1,5 @@
 import Link from "next/link";
-import { apiGet } from "@/lib/server-api";
+import { apiGet, getSession } from "@/lib/server-api";
 import { Board, type Card } from "../jobs/[id]/board/board";
 
 export const dynamic = "force-dynamic";
@@ -11,7 +11,7 @@ interface BoardData {
 }
 
 export default async function CombinedBoardPage() {
-  const data = await apiGet<BoardData>("/applications/board");
+  const [data, user] = await Promise.all([apiGet<BoardData>("/applications/board"), getSession()]);
   const total = Object.values(data.counts).reduce((sum, n) => sum + n, 0);
 
   return (
@@ -37,7 +37,7 @@ export default async function CombinedBoardPage() {
       ) : (
         <>
           <p className="mb-2 text-xs text-mid sm:hidden">Swipe sideways to move between stages.</p>
-          <Board initialCards={data.cards} columnPageSize={data.columnPageSize} combined />
+          <Board initialCards={data.cards} columnPageSize={data.columnPageSize} combined me={{ id: user.id, role: user.role }} />
         </>
       )}
     </main>
