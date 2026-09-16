@@ -31,3 +31,4 @@ e2e/.results/
 e2e/.report/
 e2e/.state/
 !e2e/fixtures/*.docx
+test-results/
